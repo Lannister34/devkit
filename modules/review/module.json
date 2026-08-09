@@ -1,0 +1,15 @@
+{
+  "name": "review",
+  "phase": "foundation",
+  "description": "Five-axis code-review agent, triggered automatically before every commit.",
+  "requires": ["core"],
+  "detect": { "anyOf": ["file:.git"] },
+  "conflicts": [],
+  "files": [
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "review" },
+    { "from": "templates/code-review.md", "to": ".claude/agents/code-review.md", "strategy": "create" },
+    { "from": "templates/require-review.mjs", "to": ".claude/hooks/require-review.mjs", "strategy": "create" },
+    { "from": "templates/settings.json", "to": ".claude/settings.json", "strategy": "merge-json" },
+    { "from": "templates/gitignore", "to": ".gitignore", "strategy": "section", "marker": "review", "markerStyle": "hash" }
+  ]
+}

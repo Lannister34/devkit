@@ -1,0 +1,12 @@
+{
+  "name": "design",
+  "phase": "foundation",
+  "description": "Design-before-code workflow and the ADR scaffold.",
+  "requires": ["core"],
+  "detect": { "always": true },
+  "conflicts": [],
+  "files": [
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "design" },
+    { "from": "templates/adr-template.md", "to": "docs/adr/0000-template.md", "strategy": "create" }
+  ]
+}

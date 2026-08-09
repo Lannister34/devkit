@@ -1,0 +1,11 @@
+{
+  "name": "core",
+  "phase": "foundation",
+  "description": "Language-agnostic engineering rules: comments, module seams, failure paths, commits.",
+  "requires": [],
+  "detect": { "always": true },
+  "conflicts": [],
+  "files": [
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "core", "header": "# {{project}} — Engineering Rules\n\n" }
+  ]
+}
