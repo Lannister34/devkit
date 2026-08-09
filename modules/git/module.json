@@ -6,7 +6,7 @@
   "detect": { "anyOf": ["file:.git"] },
   "conflicts": [],
   "vars": {
-    "commitPattern": "^(feat|fix|chore|docs|test|refactor|perf|build|ci)(\\(.+\\))?!?: .+",
+    "commitPattern": "^(feat|fix|chore|docs|test|style|refactor|perf|build|ci)(\\(.+\\))?!?: .+",
     "commitConvention": "Conventional Commits, scoped where useful: `feat(api):`, `fix(worker):`, `chore:`, `docs:`, `test:`, `refactor:`, `perf:`.",
     "eolPolicy": "* text=auto eol=lf"
   },
