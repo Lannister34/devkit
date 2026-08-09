@@ -15,8 +15,8 @@
   "conflicts": [".eslintrc", ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs"],
   "dependencies": {
     "devDependencies": {
-      "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.1&path:/packages/tsconfig",
-      "@devkit/biome-config": "github:Lannister34/devkit#v0.1.1&path:/packages/biome-config",
+      "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
+      "@devkit/biome-config": "github:Lannister34/devkit#v0.1.2&path:/packages/biome-config",
       "@biomejs/biome": "^2.1.0",
       "lefthook": "^1.10.0",
       "typescript": "^5.7.0"

@@ -1,6 +1,6 @@
 {
   "name": "@devkit/tsconfig",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Strict TypeScript compiler options. Deliberately orthogonal to module system — set module/moduleResolution per project.",
   "files": ["base.json"],
   "exports": {

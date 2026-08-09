@@ -1,6 +1,6 @@
 {
   "name": "devkit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Portable engineering rules, quality gates, and a Claude Code init skill.",
   "type": "module",

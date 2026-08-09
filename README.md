@@ -144,8 +144,8 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 `ts` installs thin `extends` stubs and pins the real config as git dependencies:
 
 ```json
-"@devkit/tsconfig": "github:Lannister34/devkit#v0.1.1&path:/packages/tsconfig",
-"@devkit/biome-config": "github:Lannister34/devkit#v0.1.1&path:/packages/biome-config"
+"@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
+"@devkit/biome-config": "github:Lannister34/devkit#v0.1.2&path:/packages/biome-config"
 ```
 
 So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the
