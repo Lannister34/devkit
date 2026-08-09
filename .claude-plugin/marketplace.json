@@ -1,0 +1,14 @@
+{
+  "name": "devkit",
+  "owner": { "name": "Misha" },
+  "description": "Portable engineering rules, quality gates, and a project init skill.",
+  "plugins": [
+    {
+      "name": "devkit",
+      "source": "./",
+      "description": "Configures engineering rules, quality gates, and an automatic code-review agent for any project — new or existing.",
+      "category": "engineering",
+      "keywords": ["engineering", "rules", "init", "code-review", "quality", "scaffolding"]
+    }
+  ]
+}
