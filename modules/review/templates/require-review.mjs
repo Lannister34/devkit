@@ -10,8 +10,10 @@ import { readFileSync } from 'node:fs';
 const ALLOW = 0;
 const BLOCK = 2;
 
-// `commit(?![-\w])` so `git commit-tree` and `git commit_foo` do not match.
-const GIT_COMMIT = /\bgit\s+(?:-[^\s]+\s+|--[^\s]+\s+)*commit(?![-\w])/;
+// `commit(?![-\w])` so `git commit-tree` and `git commit_foo` do not match. Each flag may carry a
+// separate argument (`git -C path commit`, `git -c k=v commit`) — the canonical monorepo invocation.
+// `-[^\s]+` covers `--flags` too; `--?` would parse them two ways — exponential backtracking.
+const GIT_COMMIT = /\bgit\s+(?:-[^\s]+(?:\s+[^\s-][^\s]*)?\s+)*commit(?![-\w])/;
 
 function readStdin() {
   try {
@@ -22,7 +24,10 @@ function readStdin() {
 }
 
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
 }
 
 function main() {
