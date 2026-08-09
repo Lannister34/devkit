@@ -1,0 +1,10 @@
+pre-commit:
+  # Serial: parallel hooks race concurrent builds writing the same output directories.
+  parallel: false
+  commands:
+    biome:
+      glob: "*.{ts,tsx,js,jsx,json,jsonc}"
+      run: pnpm biome check --staged --no-errors-on-unmatched
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: pnpm typecheck

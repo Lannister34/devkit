@@ -1,0 +1,35 @@
+{
+  "name": "ts",
+  "phase": "toolchain",
+  "description": "Strict TypeScript compiler options and Biome lint/format.",
+  "requires": ["core"],
+  "detect": {
+    "anyOf": [
+      "file:tsconfig.json",
+      "file:tsconfig.base.json",
+      "json:package.json#devDependencies.typescript",
+      "glob:**/*.ts",
+      "glob:**/*.tsx"
+    ]
+  },
+  "conflicts": [".eslintrc", ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs"],
+  "dependencies": {
+    "devDependencies": {
+      "@biomejs/biome": "^2.1.0",
+      "lefthook": "^1.10.0",
+      "typescript": "^5.7.0"
+    },
+    "scripts": {
+      "lint": "biome check .",
+      "format": "biome format --write .",
+      "prepare": "lefthook install"
+    }
+  },
+  "files": [
+    { "fromRoot": "packages/tsconfig/base.json", "to": "tsconfig.base.json", "strategy": "create" },
+    { "to": "tsconfig.json", "strategy": "extend-json", "extends": "./tsconfig.base.json", "compareWith": "packages/tsconfig/base.json", "compareKey": "compilerOptions" },
+    { "fromRoot": "packages/biome-config/biome.json", "to": "biome.json", "strategy": "create" },
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "ts" },
+    { "from": "templates/lefthook.yml", "to": "lefthook.yml", "strategy": "section", "marker": "ts", "markerStyle": "hash", "guardKeys": ["pre-commit"] }
+  ]
+}

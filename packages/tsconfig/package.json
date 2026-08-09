@@ -1,0 +1,9 @@
+{
+  "name": "@devkit/tsconfig",
+  "version": "0.1.0",
+  "description": "Strict TypeScript compiler options.",
+  "files": ["base.json"],
+  "exports": {
+    "./base.json": "./base.json"
+  }
+}
