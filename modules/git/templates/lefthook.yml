@@ -1,0 +1,7 @@
+# Activate once with: lefthook install
+commit-msg:
+  commands:
+    conventional:
+      # Sole gate: grep's exit code. Subshells and quoted echo break under lefthook's Windows spawn.
+      run: >-
+        head -1 {1} | grep -Eq '{{commitPattern}}'

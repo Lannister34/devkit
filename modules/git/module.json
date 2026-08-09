@@ -1,0 +1,40 @@
+{
+  "name": "git",
+  "phase": "foundation",
+  "description": "Line-ending normalisation and a commit-message convention hook.",
+  "requires": ["core"],
+  "detect": { "anyOf": ["file:.git"] },
+  "conflicts": [],
+  "vars": {
+    "commitPattern": "^(feat|fix|chore|docs|test|refactor|perf|build|ci)(\\(.+\\))?!?: .+",
+    "commitConvention": "Conventional Commits, scoped where useful: `feat(api):`, `fix(worker):`, `chore:`, `docs:`, `test:`, `refactor:`, `perf:`.",
+    "eolPolicy": "* text=auto eol=lf"
+  },
+  "checks": [
+    {
+      "type": "commit-history",
+      "key": "commit-convention",
+      "pattern": "{{commitPattern}}",
+      "sample": 20,
+      "minPassRatio": 0.5
+    },
+    {
+      "type": "line-endings",
+      "key": "line-endings",
+      "maxCrlfShare": 0.2
+    }
+  ],
+  "files": [
+    { "from": "templates/gitattributes", "to": ".gitattributes", "strategy": "create", "resolutionKey": "line-endings" },
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "git", "resolutionKey": "commit-convention" },
+    {
+      "from": "templates/lefthook.yml",
+      "to": "lefthook.yml",
+      "strategy": "section",
+      "marker": "git",
+      "markerStyle": "hash",
+      "guardKeys": ["commit-msg"],
+      "resolutionKey": "commit-convention"
+    }
+  ]
+}
