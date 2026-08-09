@@ -1,0 +1,3 @@
+{
+  "extends": "@devkit/tsconfig/base.json"
+}

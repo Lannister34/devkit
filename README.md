@@ -42,7 +42,7 @@ projects gets the rules without hooks that could never fire.
 
 | module | detects on | what it installs |
 |---|---|---|
-| `ts` | `tsconfig.json`, `*.ts`, `typescript` dep | strict `tsconfig.base.json` and `biome.json` (vendored from `packages/`), TS-specific rules, biome/typecheck pre-commit hooks |
+| `ts` | `tsconfig.json`, `*.ts`, `typescript` dep | `@devkit/tsconfig` + `@devkit/biome-config` as pinned dependencies, TS-specific rules, biome/typecheck pre-commit hooks |
 
 For a brand-new project: install `foundation`, plan the app using the design tooling you just got,
 then re-run for the toolchain once the stack is real.
@@ -141,25 +141,35 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 
 ## Versioning
 
-**devkit is unpublished, so config is vendored, not depended on.** `ts` writes the real contents of
-`packages/tsconfig/base.json` and `packages/biome-config/biome.json` into the project via `fromRoot`,
-which reads them straight from `packages/` — one source of truth, no duplicated template to drift.
-Every dependency a project ends up with resolves from npm.
+`ts` installs thin `extends` stubs and pins the real config as git dependencies:
 
-Upgrades still work: re-running raises a `keep` / `override` decision when the vendored file differs
-from the current standard, and installed modules are recorded in `.claude/toolkit.json` so a re-run
-is an upgrade rather than a duplicate install.
+```json
+"@devkit/tsconfig": "github:Lannister34/devkit#v0.1.1&path:/packages/tsconfig",
+"@devkit/biome-config": "github:Lannister34/devkit#v0.1.1&path:/packages/biome-config"
+```
 
-**Graduation path.** Once this repo is pushed and tagged, `ts` can switch back to thin `extends`
-stubs plus pinned `@devkit/*` dependencies, which upgrades by version bump instead of by decision.
-That is a change to `modules/ts/module.json` alone. Do not make it before the tag exists — a pin to
-an unpublished repo breaks `pnpm install` in every project that installs the module.
+So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the
+propagation a copied template never gives you. Installed modules are recorded in the target's
+`.claude/toolkit.json`, which makes re-running an *upgrade* rather than a duplicate install.
+
+**Never pin a tag that does not exist yet.** An unpublished pin breaks `pnpm install` in every
+project that installs the module, and it fails at install time rather than anywhere useful.
+
+`packages/tsconfig/base.json` is deliberately **orthogonal to module system** — it carries strictness
+only, and each project sets its own `module` / `moduleResolution`. A base that fixes both is unusable
+in half the projects that want the strictness.
 
 ## Status
 
-Verified: detection, planning, apply, idempotent re-apply, decisions and their `keep`/`override`/
-`extend`/`chain`/`merge` resolutions, `--var` substitution and persistence, commit-convention
-checking against real history, and the review gate across its cases (blocked, approved,
-tree-changed, non-commit command, malformed payload).
+Verified end to end against a real project: install → `pnpm install` → `tsc` inherits the strict base
+with local overrides intact → `biome` resolves the shared config and flags `noExplicitAny` and
+`noNonNullAssertion`.
 
-Not verified: anything requiring devkit to be published. It is not a git repo yet.
+Also verified: detection across project/container/monorepo shapes, planning, apply, idempotent
+re-apply, decisions and their `keep`/`override`/`extend`/`chain`/`merge` resolutions, `--var`
+substitution and persistence, commit-convention and line-ending checks against real repository
+state, and the review gate across its cases (blocked, approved, tree-changed, non-commit command,
+malformed payload).
+
+Known gap: installing `ts` into a codebase that has never been formatted will rewrite most files on
+the first `biome format` run, and nothing warns about the blast radius yet.
