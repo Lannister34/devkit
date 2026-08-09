@@ -1,6 +1,6 @@
 {
   "name": "@devkit/biome-config",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared Biome lint and format rules.",
   "files": ["biome.json"],
   "exports": {
