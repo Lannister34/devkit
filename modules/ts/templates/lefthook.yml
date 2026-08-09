@@ -3,7 +3,7 @@ pre-commit:
   parallel: false
   commands:
     biome:
-      glob: "*.{ts,tsx,js,jsx,json,jsonc}"
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
       run: pnpm biome check --staged --no-errors-on-unmatched
     typecheck:
       glob: "*.{ts,tsx}"
