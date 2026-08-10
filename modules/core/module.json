@@ -6,6 +6,6 @@
   "detect": { "always": true },
   "conflicts": [],
   "files": [
-    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "core", "header": "# {{project}} — Engineering Rules\n\n" }
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "core", "header": "# {{project}}\n\n## Проект\n\n<!-- TODO: заполнить при первом касании — агент читает этот файл каждую сессию.\nОдним абзацем: что это и зачем. Дальше ссылками, не пересказом (один факт —\nодно место): архитектура и запуск, словарь домена, решения (ADR). Затем:\nпроцессы и цена их отказа (что нельзя рестартовать), команды проверок.\nСвой текст держать ВНЕ devkit-маркеров — содержимое секций обновляет тулкит. -->\n\n" }
   ]
 }
