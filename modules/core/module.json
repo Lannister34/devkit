@@ -1,11 +1,22 @@
 {
   "name": "core",
   "phase": "foundation",
-  "description": "Language-agnostic engineering rules: comments, module seams, failure paths, commits.",
+  "description": "Language-agnostic engineering rules: comments, module seams, failure paths, documentation.",
   "requires": [],
   "detect": { "always": true },
   "conflicts": [],
+  "vars": {
+    "docLanguage": "English"
+  },
+  "checks": [
+    {
+      "type": "doc-language",
+      "key": "doc-language",
+      "sample": 40,
+      "minShare": 0.05
+    }
+  ],
   "files": [
-    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "core", "header": "# {{project}}\n\n## Проект\n\n<!-- TODO: заполнить при первом касании — агент читает этот файл каждую сессию.\nОдним абзацем: что это и зачем. Дальше ссылками, не пересказом (один факт —\nодно место): архитектура и запуск, словарь домена, решения (ADR). Затем:\nпроцессы и цена их отказа (что нельзя рестартовать), команды проверок.\nСвой текст держать ВНЕ devkit-маркеров — содержимое секций обновляет тулкит. -->\n\n" }
+    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "core", "header": "# {{project}}\n\n## Project\n\n<!-- TODO: fill in on first contact — the agent reads this file every session.\nOne paragraph: what this is and why. After that, links rather than retellings (one fact,\none place): architecture and how to run it, domain vocabulary, decisions (ADR). Then:\nprocesses and the cost of their failure (what must never be restarted), check commands.\nKeep your own text OUTSIDE the devkit markers — the toolkit rewrites section contents. -->\n\n" }
   ]
 }

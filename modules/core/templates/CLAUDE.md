@@ -24,6 +24,15 @@ these cases:
 Anything restating what the line does is noise; delete it. If a comment is needed to explain *what*
 code does, rename or split the code instead.
 
+## Documentation
+
+Written documentation is in **{{docLanguage}}** — this file, `README`, ADRs, anything under `docs/`,
+including headings and TODOs. Keep one fact in one place: link to the document that owns a subject
+rather than restating it, because two copies of a fact become one stale copy.
+
+Not in scope: code comments, identifiers, and domain vocabulary, which follow the codebase they live
+in. Do not translate them as a side effect of touching something else.
+
 ## Module seams
 
 - **Narrow interface, substantial implementation.** A module earns its place by hiding more than it

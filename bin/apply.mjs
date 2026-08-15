@@ -232,6 +232,51 @@ function textDelta(theirs, ours) {
 
 // Forcing `eol=lf` onto a repo whose history is CRLF rewrites every text file the next time anything
 // touches them — a several-hundred-file diff that looks like work and is not. Ask first.
+// Non-Latin scripts, not "non-ASCII" — accented Latin would flag French and German documentation as
+// foreign. Cyrillic, CJK, Greek, Arabic and Hebrew are unambiguous.
+const NON_LATIN = /[Ѐ-ӿ一-鿿぀-ヿ؀-ۿ֐-׿Ͱ-Ͽ]/g;
+
+function checkDocLanguage(target, module, check, key, vars) {
+  if ((vars.docLanguage ?? 'English') !== 'English') return null;
+  let files;
+  try {
+    files = execFileSync('git', ['-C', target, 'ls-files', '*.md'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+  const foreign = [];
+  for (const file of files.slice(0, check.sample ?? 40)) {
+    let text;
+    try {
+      text = readFileSync(join(target, file), 'utf8');
+    } catch {
+      continue;
+    }
+    const dense = text.replace(/\s/g, '');
+    if (dense.length === 0) continue;
+    const share = (text.match(NON_LATIN) ?? []).length / dense.length;
+    if (share > (check.minShare ?? 0.05)) foreign.push({ file, share: Number(share.toFixed(2)) });
+  }
+  if (foreign.length === 0) return null;
+
+  return {
+    module: module.name,
+    path: key,
+    action: 'decision',
+    reason: `${foreign.length} of ${files.length} documentation files are written in a non-Latin script; devkit's rules and templates are English`,
+    options: ['translate', 'keep'],
+    detail: {
+      files: foreign.slice(0, 10),
+      scope: 'Markdown documentation only — code comments and identifiers are not in scope.',
+      note:
+        'translate = adopt English; the existing docs are translated as a separate, explicitly confirmed step after install. ' +
+        'keep = supply the project language via --var docLanguage=<name>. Note that devkit ships English sections and rewrites them on every upgrade, so a translated devkit section cannot survive — keeping another language means a mixed file.',
+    },
+  };
+}
+
 function checkLineEndings(target, module, check, key, vars) {
   // Once the policy no longer forces LF the conflict is gone, so the question stops being asked —
   // same self-resolving behaviour as supplying a matching commit pattern.
@@ -285,6 +330,15 @@ function planChecks(target, module, vars, resolutions) {
   const out = [];
   for (const check of module.checks ?? []) {
     const key = check.key ?? check.path;
+
+    // Deliberately above the resolution skip: a bare `keep` would silence the question while leaving
+    // the installed rule claiming English. Only naming the actual language settles this one.
+    if (check.type === 'doc-language') {
+      const decision = checkDocLanguage(target, module, check, key, vars);
+      if (decision) out.push(decision);
+      continue;
+    }
+
     if (resolutions[key] === 'override' || resolutions[key] === 'keep') continue;
 
     if (check.type === 'line-endings') {

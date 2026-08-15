@@ -137,6 +137,20 @@ disagree are worse than neither — the file stops being trusted.
 change nothing today), **plan** (a written breakdown, saved as an ADR or ticket), or **do it now**
 (only when the user is clear about the size).
 
+**Documentation language** is the one decision whose options are not both flags.
+
+- **translate** — the applier does nothing with this. Land the install first, then list the affected
+  files, get an explicit yes, and translate them as their own commit. Never fold a translation into
+  another change, and never touch code comments, identifiers, or domain vocabulary — the decision
+  covers Markdown documentation only.
+- **keep** — pass `--var docLanguage=<name>` so the installed rule names the real language. A bare
+  `--resolve` is refused here on purpose. State the cost before they choose: devkit's own sections
+  ship in English and are rewritten on every upgrade, so they cannot hold a translation, and the
+  file stays permanently mixed.
+
+Commit messages are outside this decision. They are English regardless of what the project uses, so
+do not offer a choice about them.
+
 Either way, carry the numbers. "417 errors, roughly 230 mechanical and 180 real type errors" is a
 decision. "There is a conflict" is not.
 
