@@ -31,9 +31,12 @@ messages. Authorization checked at the layer that owns the resource, not the cal
 **Performance.** Queries inside loops, unbounded concurrency or result sets, whole payloads buffered
 where streaming was available. Flag only what is on a hot path or unbounded — do not speculate.
 
-**Readability.** Comments that restate the code (delete) versus comments carrying a *why*, an
-invariant, or a gotcha (keep). Names that mislead. A seam extracted with no trigger behind it, or a
-trigger that has fired and been ignored.
+**Readability.** Comments against the no-comment default: anything restating a name, a type, the
+next line, or a fact an ADR/doc already owns is a finding (delete); a surviving comment is one line,
+in English, and marks a genuine surprise — a worked-around bug, an invariant a natural edit would
+break, a why whose obvious alternative fails. Multi-line retellings and doc-headers on
+self-describing declarations are findings even when their content is true. Names that mislead. A
+seam extracted with no trigger behind it, or a trigger that has fired and been ignored.
 
 ## Type discipline
 

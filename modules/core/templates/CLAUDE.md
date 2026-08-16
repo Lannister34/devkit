@@ -12,17 +12,22 @@ if something fails, say so and show it; if a step was skipped, name it. "Should 
 
 ## Comments
 
-Code carries its own explanation through names and structure. A comment is warranted **only** in
-these cases:
+The default for any line, declaration, or file is **no comment**. Names, types, and structure carry
+the what; documentation and ADRs carry the design and the why. A comment earns its line only where
+reality cuts against what a reader who knows the docs would expect:
 
 - `TODO:` — something known-incomplete, naming what has to happen.
-- A non-obvious **why** — the reason a surprising choice is correct, where the obvious alternative
-  fails.
-- An invariant a future edit could silently break.
-- A gotcha — platform quirk, ordering constraint, upstream bug being worked around.
+- A surprise being worked around: an upstream bug, a platform quirk, an ordering constraint.
+- An invariant a natural-looking edit would silently break.
+- A why whose obvious alternative fails — named as the failure, not told as a story.
 
-Anything restating what the line does is noise; delete it. If a comment is needed to explain *what*
-code does, rename or split the code instead.
+Form is part of the rule. **One line, in English** — a fact that needs more belongs in an ADR or a
+doc, and the code keeps only the reference (`ADR 0011`), never a retelling. No doc-headers on
+self-describing declarations: a field, parameter, or method whose name and type already say what it
+is gets nothing; a contract the type cannot express — units, zero/absent semantics, ownership —
+earns its single line. Anything restating the name, the type, the next line, or a fact a document already
+owns is noise; delete it. If a comment is needed to explain *what* code does, rename or split the
+code instead.
 
 ## Documentation
 
@@ -30,8 +35,9 @@ Written documentation is in **{{docLanguage}}** — this file, `README`, ADRs, a
 including headings and TODOs. Keep one fact in one place: link to the document that owns a subject
 rather than restating it, because two copies of a fact become one stale copy.
 
-Not in scope: code comments, identifiers, and domain vocabulary, which follow the codebase they live
-in. Do not translate them as a side effect of touching something else.
+Not in scope: identifiers and domain vocabulary, which follow the codebase they live in — do not
+rename or translate them as a side effect of touching something else. Code comments are governed by
+the Comments rule: English, whatever the documentation language.
 
 ## Module seams
 
