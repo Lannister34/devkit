@@ -25,9 +25,9 @@ Form is part of the rule. **One line, in English** — a fact that needs more be
 doc, and the code keeps only the reference (`ADR 0011`), never a retelling. No doc-headers on
 self-describing declarations: a field, parameter, or method whose name and type already say what it
 is gets nothing; a contract the type cannot express — units, zero/absent semantics, ownership —
-earns its single line. Anything restating the name, the type, the next line, or a fact a document already
-owns is noise; delete it. If a comment is needed to explain *what* code does, rename or split the
-code instead.
+earns its single line. Anything restating the name, the type, the next line, or a fact a document
+already owns is noise; delete it. If a comment is needed to explain *what* code does, rename or
+split the code instead.
 
 ## Documentation
 
