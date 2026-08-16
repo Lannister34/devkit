@@ -1,6 +1,6 @@
 {
   "name": "devkit",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Configures engineering rules, quality gates, and an automatic code-review agent for any project.",
   "author": {
     "name": "Misha"
