@@ -31,12 +31,11 @@ messages. Authorization checked at the layer that owns the resource, not the cal
 **Performance.** Queries inside loops, unbounded concurrency or result sets, whole payloads buffered
 where streaming was available. Flag only what is on a hot path or unbounded — do not speculate.
 
-**Readability.** Comments against the no-comment default: anything restating a name, a type, the
-next line, or a fact an ADR/doc already owns is a finding (delete); a surviving comment is one line,
-in English, and marks a genuine surprise — a worked-around bug, an invariant a natural edit would
-break, a why whose obvious alternative fails. Multi-line retellings and doc-headers on
-self-describing declarations are findings even when their content is true. Names that mislead. A
-seam extracted with no trigger behind it, or a trigger that has fired and been ignored.
+**Readability.** Any comment other than an English `TODO:` naming known-incomplete work is a
+finding — delete it; if it carried a fact, the fact moves to the ADR/doc that owns it or goes to
+the owner as a question. Tool directives (`@ts-expect-error` with its reason, `biome-ignore`) are
+not comments. Names that mislead. A seam extracted with no trigger behind it, or a trigger that has
+fired and been ignored.
 
 ## Type discipline
 
