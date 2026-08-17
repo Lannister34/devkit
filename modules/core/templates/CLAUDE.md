@@ -87,8 +87,8 @@ belongs to, because the class decides what happens next:
 - **The toolchain should have caught it** — missing lint rule, loose type, unvalidated boundary.
   Tighten the toolchain, same commit.
 - **An uncovered case** — add the test that would have failed, same commit.
-- **A wrong assumption about something external** — pin it with a test at that boundary and leave a
-  comment saying what surprised you.
+- **A wrong assumption about something external** — pin it with a test at that boundary whose name
+  states what surprised you.
 - **Ordering, concurrency, or lifecycle** — fix the immediate break, then *propose* the design change.
 - **Architecture** — the seam is in the wrong place. Fix the break, propose the redesign, do not
   start it.
