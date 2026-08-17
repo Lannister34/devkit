@@ -9,6 +9,10 @@
 - **No non-null assertions (`!`).** Narrow, or handle the nullish case.
 - **No cast-built test doubles.** Never `as unknown as X`. Depend on a narrow port and implement it
   with a typed mock.
+- **Value mapping over a closed key set is a lookup, not control flow.** `Record<Key, Value>` (or a
+  `satisfies`-checked table), never `switch`/`case`, never an `if`/`else` chain, never a nested
+  ternary. A lookup makes a missing key a type error instead of a forgotten branch. This covers
+  dispatch too: choosing a handler by discriminant is a `Record` of functions.
 - **Test files belong to the typecheck program.** The build config excludes them from the output
   directory, but `tsc --noEmit` must still see them — the test runner transpiles without
   type-checking, so a test file excluded from both is checked by nothing.

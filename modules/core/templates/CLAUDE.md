@@ -12,8 +12,8 @@ if something fails, say so and show it; if a step was skipped, name it. "Should 
 
 ## Comments
 
-The only comment that may exist in code is `TODO:` — known-incomplete work, naming what has to
-happen, in English. Everything else lives elsewhere: the what in names, types, and structure; the
+The only comment that may exist in code is a `// TODO:` line — known-incomplete work, naming what
+has to happen, in English; no block or doc-comment forms. Everything else lives elsewhere: the what in names, types, and structure; the
 why and the invariants in ADRs, docs, and tests. If code seems to need explaining, rename it, split
 it, or move the fact to the document that owns it; a reader left with a question raises it with the
 owner, and an explanatory comment appears only when the owner asks for one. Tool directives that
