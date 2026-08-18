@@ -13,6 +13,10 @@
   `satisfies`-checked table), never `switch`/`case`, never an `if`/`else` chain, never a nested
   ternary. A lookup makes a missing key a type error instead of a forgotten branch. This covers
   dispatch too: choosing a handler by discriminant is a `Record` of functions.
+- **A shape is declared once.** A type or interface whose fields mirror one declared elsewhere is
+  the same shape: import it, or derive it (`Pick`/`Omit`/`z.infer`) from the owner. Twin
+  declarations are not equivalent — they are two owners that have not diverged yet, and nothing
+  will announce it when they do.
 - **Test files belong to the typecheck program.** The build config excludes them from the output
   directory, but `tsc --noEmit` must still see them — the test runner transpiles without
   type-checking, so a test file excluded from both is checked by nothing.
