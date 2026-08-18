@@ -1,0 +1,29 @@
+{
+  "name": "nest",
+  "phase": "toolchain",
+  "description": "NestJS structure conventions: feature modules, entrypoint discipline, config and DI boundaries.",
+  "requires": [
+    "ts"
+  ],
+  "detect": {
+    "allOf": [
+      {
+        "anyOf": [
+          "json:package.json#dependencies.@nestjs/core",
+          "json:package.json#devDependencies.@nestjs/core",
+          "json:apps/*/package.json#dependencies.@nestjs/core"
+        ]
+      },
+      "glob:**/*.module.ts"
+    ]
+  },
+  "conflicts": [],
+  "files": [
+    {
+      "from": "templates/CLAUDE.md",
+      "to": "CLAUDE.md",
+      "strategy": "section",
+      "marker": "nest"
+    }
+  ]
+}
