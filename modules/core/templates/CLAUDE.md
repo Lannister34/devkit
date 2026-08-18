@@ -45,6 +45,37 @@ the Comments rule: English, whatever the documentation language.
   Until a trigger fires, leave it inline. Premature splitting produces shallow fragments that are
   harder to follow than the code they replaced.
 
+## Structure
+
+- **The entrypoint wires; it declares nothing.** An entrypoint constructs the app's pieces, connects
+  them, starts them, and handles boot failure — nothing else. It exports nothing, nothing imports it,
+  and logic does not hide in it as inline callbacks: a handler body longer than a delegation is a
+  declaration in disguise. A config object, interface, helper, or service class living in the
+  entrypoint is a file that has not been created yet; a run-guard (`if __main__`, `process.argv`
+  checks) is the file admitting it is two files. Scope: deployable apps — a single-file tool is its
+  own entrypoint, and this rule begins once the program grows past one file.
+- **A file is one role, and grab-bag names are not roles.** The filename states what the file holds;
+  every top-level declaration fits that statement. `utils`, `helpers`, `common`, `misc` state
+  nothing — a declaration that only fits there is a declaration whose owner has not been found yet.
+  Splitting follows the seam triggers above, not a count: a parser beside its error type is one
+  role; a queue consumer beside an HTTP handler is two.
+- **Config is one module per app.** The environment is read in exactly one place per app, validated
+  at startup — named keys with types; a passthrough bag is not validation — and injected everywhere
+  else. A default restated at a call site is a value with N owners: rotating it means finding all N,
+  and missing one is silent. Any `process.env` / `os.environ` read outside the config module is a
+  bug, entrypoint included. Same scope as the entrypoint rule: a single-file tool reading a variable
+  is not an app.
+- **Same-stack siblings share one skeleton.** Apps built on the same framework repeat one layout —
+  same file names, same places, so a reader who knows one app knows them all. An app on a different
+  stack follows that stack's idiom instead. Changing the skeleton is a recorded decision, not drift
+  from the newest app.
+- **Packages are entered through their surface.** Imports cross an app/package boundary only through
+  the package's public entry point. Deep imports into internals and `export *` over another
+  package's files dissolve the boundary. A surface is curated: a barrel that re-exports every
+  internal file is not a surface but the absence of one — a package hides more than it exposes, same
+  as any module. Direction is one-way: shared libs never import from apps; a lib that needs an app's
+  type is a type that belongs in the lib.
+
 ## Layering
 
 Decision logic must be callable without touching the network, disk, clock, or environment. Push I/O
