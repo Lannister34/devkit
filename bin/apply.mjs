@@ -99,9 +99,23 @@ function testPredicate(target, predicate) {
   const value = rest.join(':');
   if (kind === 'file') return existsSync(join(target, value));
   if (kind === 'glob') {
-    const match = /^\*\*\/\*(\.[A-Za-z0-9]+)$/.exec(value);
+    const match = /^\*\*\/\*((?:\.[A-Za-z0-9]+)+)$/.exec(value);
     if (!match?.[1]) return existsSync(join(target, value));
     return hasFileWithExtension(target, match[1]);
+  }
+  // One '*' path segment fans the check out over sibling dirs (json:apps/*/package.json#...) —
+  // workspace monorepos keep framework deps in member manifests, invisible to a root-only read.
+  if (kind === 'json' && value.includes('*')) {
+    const [file, path] = value.split('#');
+    if (!file || !path) return false;
+    const [before, after] = file.split('*');
+    let members;
+    try {
+      members = readdirSync(join(target, before), { withFileTypes: true }).filter((d) => d.isDirectory());
+    } catch {
+      return false;
+    }
+    return members.some((d) => testPredicate(target, `json:${before}${d.name}${after}#${path}`));
   }
   if (kind === 'json') {
     const [file, path] = value.split('#');
@@ -113,11 +127,17 @@ function testPredicate(target, predicate) {
   return false;
 }
 
+function detectNode(target, node) {
+  if (typeof node === 'string') return testPredicate(target, node);
+  if (node && Array.isArray(node.anyOf)) return node.anyOf.some((n) => detectNode(target, n));
+  if (node && Array.isArray(node.allOf)) return node.allOf.every((n) => detectNode(target, n));
+  return false;
+}
+
 function detects(target, module) {
   const rule = module.detect ?? {};
   if (rule.always) return true;
-  if (Array.isArray(rule.anyOf)) return rule.anyOf.some((p) => testPredicate(target, p));
-  return false;
+  return detectNode(target, rule);
 }
 
 function findConflicts(target, module) {
