@@ -43,6 +43,7 @@ projects gets the rules without hooks that could never fire.
 | module | detects on | what it installs |
 |---|---|---|
 | `ts` | `tsconfig.json`, `*.ts`, `typescript` dep | `@devkit/tsconfig` + `@devkit/biome-config` as pinned dependencies, TS-specific rules, biome/typecheck pre-commit hooks |
+| `nest` | `@nestjs/core` dep AND `*.module.ts` usage | NestJS skeleton, role suffixes, layer direction, composition-root and worker conventions |
 
 For a brand-new project: install `foundation`, plan the app using the design tooling you just got,
 then re-run for the toolchain once the stack is real.

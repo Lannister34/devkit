@@ -83,6 +83,11 @@ A module installs only when its `detect` predicate fires, or the user explicitly
 Python-only repo does not get TypeScript rules. If a module looks like it should apply but detection
 disagrees, say so and let the user decide — never override the predicate silently.
 
+A declared dependency is a claim; usage is the fact. Framework modules demand both — `@nestjs/core`
+in package.json with zero `*.module.ts` files means the framework is not actually in use, and its
+conventions would be dead weight. When you notice that split, surface it: the dependency is either
+an adoption about to happen (install the module when it does) or a leftover to remove.
+
 ## 5. Plan, resolve, apply — iteratively
 
 `apply.mjs` plans by default and writes nothing without `--apply`. Plan first, in JSON:
