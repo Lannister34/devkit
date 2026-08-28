@@ -75,6 +75,11 @@ the Comments rule: English, whatever the documentation language.
   internal file is not a surface but the absence of one — a package hides more than it exposes, same
   as any module. Direction is one-way: shared libs never import from apps; a lib that needs an app's
   type is a type that belongs in the lib.
+- **Spike code never migrates into `apps/`.** A spike proves a hypothesis and is discarded; what
+  survives is knowledge, recorded in a `FINDINGS.md` beside the spike. Graduating a spike is an
+  explicit act: implement the finding into the skeleton, from scratch — the finding may be the code
+  itself, and then it is rebuilt in place with its tests, not moved. Launch mechanics that were
+  convenient for the spike are part of what gets discarded.
 
 ## Layering
 
