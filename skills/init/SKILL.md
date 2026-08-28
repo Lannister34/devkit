@@ -182,7 +182,13 @@ run them if the user agrees:
 - `lefthook install` — nothing in `lefthook.yml` runs until this happens.
 - Restart the session if `review` was newly installed, so the hook in `.claude/settings.json` loads.
 
-Then verify rather than assume: lint and typecheck should actually run clean.
+Then verify rather than assume: lint and typecheck should actually run clean. On a fresh
+seed, run the formatter once first (`pnpm format`) so devkit's own written files match it; on an
+existing project never do that unprompted — first-format blast radius is the user's decision.
+
+When seeding a brand-new project, the scaffold slice ships with its first test: `vitest run` on an
+empty set exits 1, so a test-less scaffold is red by construction. Do not paper over it with
+`passWithNoTests` — that masks emptiness; write the first real test in the same slice instead.
 
 ## Out of scope
 
