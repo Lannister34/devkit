@@ -140,6 +140,12 @@ function detects(target, module) {
   return detectNode(target, rule);
 }
 
+function findAdvisories(target, module) {
+  return (module.advisories ?? [])
+    .filter((a) => detectNode(target, a.when))
+    .map((a) => ({ module: module.name, note: a.note }));
+}
+
 function findConflicts(target, module) {
   return (module.conflicts ?? []).filter((path) => existsSync(join(target, path)));
 }
@@ -526,6 +532,7 @@ function planFile(target, overlay, module, entry, vars, resolutions) {
   }
 
   if (entry.strategy === 'merge-json') {
+    if (resolution === 'keep') return { module: module.name, path: to, action: 'kept', reason: 'resolved: keep existing' };
     const incoming = JSON.parse(template);
     if (existing === null) {
       return { module: module.name, path: to, action: 'create', content: `${JSON.stringify(incoming, null, 2)}\n` };
@@ -596,6 +603,7 @@ function main() {
       description: module.description,
       detected: detects(args.target, module),
       conflicts: findConflicts(args.target, module),
+      advisories: detects(args.target, module) ? findAdvisories(args.target, module).map((a) => a.note) : [],
     }));
     process.stdout.write(`${JSON.stringify({ target: args.target, version, modules: report }, null, 2)}\n`);
     return 0;
@@ -614,6 +622,7 @@ function main() {
   const chosenVars = { ...(manifest.vars ?? {}), ...args.vars };
   const actions = [];
   const blockers = [];
+  const advisories = [];
   const overlay = new Map();
 
   const record = (action) => {
@@ -626,6 +635,7 @@ function main() {
     for (const path of findConflicts(args.target, module)) {
       blockers.push({ module: module.name, path, reason: 'conflicting tool already configured' });
     }
+    advisories.push(...findAdvisories(args.target, module));
     for (const action of planChecks(args.target, module, vars, resolutions)) record(action);
     for (const action of planDependencies(args.target, overlay, module)) record(action);
     for (const entry of module.files ?? []) record(planFile(args.target, overlay, module, entry, vars, resolutions));
@@ -652,6 +662,7 @@ function main() {
     skipped: actions.filter((a) => a.action === 'skip').map(({ module, path, reason }) => ({ module, path, reason })),
     decisions: decisions.map(({ module, path, reason, options, detail }) => ({ module, path, reason, options, detail })),
     conflicts: [...conflicts.map(({ module, path, reason }) => ({ module, path, reason })), ...blockers],
+    advisories,
     resolutions,
   };
 
