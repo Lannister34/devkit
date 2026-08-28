@@ -2,7 +2,9 @@
   "name": "ts",
   "phase": "toolchain",
   "description": "Strict TypeScript compiler options and Biome lint/format.",
-  "requires": ["core"],
+  "requires": [
+    "core"
+  ],
   "detect": {
     "anyOf": [
       "file:tsconfig.json",
@@ -12,12 +14,18 @@
       "glob:**/*.tsx"
     ]
   },
-  "conflicts": [".eslintrc", ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs"],
+  "conflicts": [
+    ".eslintrc",
+    ".eslintrc.json",
+    ".eslintrc.cjs",
+    "eslint.config.js",
+    "eslint.config.mjs"
+  ],
   "dependencies": {
     "devDependencies": {
       "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
-      "@devkit/biome-config": "github:Lannister34/devkit#v0.1.2&path:/packages/biome-config",
-      "@biomejs/biome": "^2.1.0",
+      "@devkit/biome-config": "github:Lannister34/devkit#v0.1.8&path:/packages/biome-config",
+      "@biomejs/biome": "2.5.9",
       "lefthook": "^1.10.0",
       "typescript": "^5.7.0"
     },
@@ -28,10 +36,38 @@
     }
   },
   "files": [
-    { "from": "templates/tsconfig.base.json", "to": "tsconfig.base.json", "strategy": "create" },
-    { "to": "tsconfig.json", "strategy": "extend-json", "extends": "./tsconfig.base.json", "compareWith": "packages/tsconfig/base.json", "compareKey": "compilerOptions" },
-    { "from": "templates/biome.json", "to": "biome.json", "strategy": "create" },
-    { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "ts" },
-    { "from": "templates/lefthook.yml", "to": "lefthook.yml", "strategy": "section", "marker": "ts", "markerStyle": "hash", "guardKeys": ["pre-commit"] }
+    {
+      "from": "templates/tsconfig.base.json",
+      "to": "tsconfig.base.json",
+      "strategy": "create"
+    },
+    {
+      "to": "tsconfig.json",
+      "strategy": "extend-json",
+      "extends": "./tsconfig.base.json",
+      "compareWith": "packages/tsconfig/base.json",
+      "compareKey": "compilerOptions"
+    },
+    {
+      "from": "templates/biome.json",
+      "to": "biome.json",
+      "strategy": "merge-json"
+    },
+    {
+      "from": "templates/CLAUDE.md",
+      "to": "CLAUDE.md",
+      "strategy": "section",
+      "marker": "ts"
+    },
+    {
+      "from": "templates/lefthook.yml",
+      "to": "lefthook.yml",
+      "strategy": "section",
+      "marker": "ts",
+      "markerStyle": "hash",
+      "guardKeys": [
+        "pre-commit"
+      ]
+    }
   ]
 }
