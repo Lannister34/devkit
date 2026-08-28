@@ -24,6 +24,22 @@
       "to": "CLAUDE.md",
       "strategy": "section",
       "marker": "nest"
+    },
+    {
+      "from": "templates/biome-override.json",
+      "to": "biome.json",
+      "strategy": "merge-json"
+    }
+  ],
+  "advisories": [
+    {
+      "when": {
+        "anyOf": [
+          "json:package.json#devDependencies.tsx",
+          "json:package.json#dependencies.tsx"
+        ]
+      },
+      "note": "tsx is present alongside Nest. tsx transforms through esbuild, which never emits decorator metadata — type-based constructor injection fails silently under it. Run compiled (tsc -b, node dist) or via SWC; see the NestJS toolchain rule."
     }
   ]
 }

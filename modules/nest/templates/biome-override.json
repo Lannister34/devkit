@@ -1,0 +1,16 @@
+{
+  "overrides": [
+    {
+      "includes": [
+        "apps/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "off"
+          }
+        }
+      }
+    }
+  ]
+}

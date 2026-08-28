@@ -31,6 +31,24 @@ apps/<app>/src/
   `APP_PIPE` tokens. Conditional logic or I/O in a root module is a finding; a cross-cutting guard
   attached to one controller instead of bound globally is one too. Config follows core's
   one-module rule — here that module is `ConfigModule` with a validated model.
+- **The toolchain must emit decorator metadata.** Nest resolves type-based constructor injection
+  through `emitDecoratorMetadata`; any runtime that honours the flag is sound, and esbuild-based
+  runtimes — `tsx`, vitest's default transform — never do: injection fails silently at boot, because
+  `design:paramtypes` is simply absent. The skeleton's blessed paths are compiled (`tsc -b` →
+  `node dist`) and SWC; tests get the same treatment via `unplugin-swc` + `@swc/core` with an
+  `.swcrc` setting `jsc.parser.decorators` and `jsc.transform.{legacyDecorator,decoratorMetadata}`
+  to `true`. Within constructor injection the one metadata-free escape is an explicit
+  `@Inject(token)` on every parameter — a bare `@Inject()` falls back to the metadata that is not
+  there.
+- **`import type` breaks DI.** A constructor parameter's class is a runtime value to Nest, not a
+  type: `import type { HealthService }` erases the import, the reflected token degrades to
+  `Object`, and Nest refuses to boot with an unresolved-dependency error (`can't resolve
+  dependencies of X (?, Object)`). The two failures read differently — silent `undefined` means
+  metadata was never emitted; a loud `(?, Object)` means `import type` ate the token. Biome's
+  `useImportType` "safe fix" causes the second, so the module ships a `biome.json` override
+  disabling it for `apps/**`. The scope follows the framework, not the directory: a lib that
+  carries Nest artifacts (guards, interceptors, injectable services) needs the override too, and a
+  framework-free lib keeps the rule.
 - **Workers differ at the edges only.** Controllers become consumers, `listen()` becomes `init()`
   plus a health probe; the skeleton stays. If a worker grows a layout of its own, that is a skeleton
   change — record the decision, do not drift into it.
