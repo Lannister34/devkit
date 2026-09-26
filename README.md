@@ -33,7 +33,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 | `core` | always | comment whitelist, module-seam and extraction-trigger rules, failure-path rules, commit conventions |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
 | `git` | `.git` | line-ending normalisation, conventional-commit message hook |
-| `review` | `.git` | five-axis code-review agent + a pre-commit gate that triggers it |
+| `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate bound to each worktree's staged tree |
 
 `git` and `review` are gated on the target being a repository root, so a folder that merely *contains*
 projects gets the rules without hooks that could never fire.
@@ -52,14 +52,31 @@ then re-run for the toolchain once the stack is real.
 
 `review` is the answer to "I want to coordinate, not validate every step":
 
-1. A `PreToolUse` hook intercepts `git commit`.
-2. It compares `git write-tree` against `.claude/.review-state`.
-3. No match → the commit is blocked with an instruction to run the `code-review` agent.
-4. The agent reviews `git diff --cached` across five axes and records approval **only** when nothing
-   is blocking.
+1. A `PreToolUse` hook reads every command the `Bash` and `PowerShell` tools are about to run the way
+   that shell would: quoted text and heredoc or here-string bodies are data, so a message or a note
+   that mentions `git commit` is not one.
+2. For each `git commit` it finds, it resolves the worktree the commit targets — the tool's `cwd`,
+   then any `cd` before it, then each `-C` — and compares that worktree's `git write-tree` with the
+   approval recorded in that worktree's own git directory (`git rev-parse --git-path
+   devkit-review-state`: one per worktree, never tracked, nothing to ignore).
+3. No match → the commit is blocked with the exact command that records approval. Three shapes are
+   blocked outright: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`, `--git-dir`) cannot be
+   judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`, pathspecs) writes a tree
+   nobody reviewed; a commit that skips hooks (`--no-verify`, `core.hooksPath`) skips the gates the
+   approval assumes.
+4. The agent reviews that worktree's staged diff against the project's rules and its own axes, and
+   runs `.claude/hooks/approve-review.mjs` **only** when nothing is blocking. A rule broken by a line
+   the diff adds blocks; one on an untouched line is reported as debt.
 
-Approval is bound to the exact staged tree, so reviewing once and then staging more does not slip
-through. The hook fails open on any unexpected condition — a broken gate must never wedge a repo.
+Approval is bound to one worktree's exact staged tree, so staging more after a review does not slip
+through, and reviewing one worktree does not approve its sibling. The hook is registered as
+`node "$CLAUDE_PROJECT_DIR/.claude/hooks/require-review.mjs"`, so it loads from the project whatever
+directory the command runs in. Claude Code runs command hooks through Git Bash on Windows; a Windows
+install without Git Bash runs them through PowerShell, where that path does not expand and the hook
+never fires. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
+payload misbehaves — a broken gate must never wedge a repo. It is a backstop for the agent's own
+commits, not a sandbox: it sees one command at a time, starting from the working directory the tool
+reports, so a commit hidden in `bash -c`, `eval`, a script, or a rebase is not one it sees.
 
 ## Internals
 

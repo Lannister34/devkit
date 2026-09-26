@@ -2,11 +2,11 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/require-review.mjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-review.mjs\""
           }
         ]
       }
