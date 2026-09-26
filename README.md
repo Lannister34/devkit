@@ -170,6 +170,13 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 "@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config"
 ```
 
+`@devkit/checks` carries the gates Biome has no rule for. `devkit-comments` reads every tracked
+TypeScript, JavaScript and CSS file with the TypeScript parser's own comment ranges — so a regex, a
+template string, or JSX text that looks like a comment is not one — and fails any comment core does
+not allow. On code that already breaks the rule it gates against `.devkit/comments-baseline.json`: a
+file above its count fails, and so does a file below it until the baseline is lowered, so slack
+never accumulates for a new comment to hide in.
+
 So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the
 propagation a copied template never gives you. Installed modules are recorded in the target's
 `.claude/toolkit.json`, which makes re-running an *upgrade* rather than a duplicate install.

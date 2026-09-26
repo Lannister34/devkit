@@ -11,5 +11,8 @@
     "detect": "node bin/apply.mjs --detect --target",
     "plan": "node bin/apply.mjs --target",
     "test": "node --test"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
   }
 }
