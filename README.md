@@ -42,7 +42,7 @@ projects gets the rules without hooks that could never fire.
 
 | module | detects on | what it installs |
 |---|---|---|
-| `ts` | `tsconfig.json`, `*.ts`, `typescript` dep | `@devkit/tsconfig` + `@devkit/biome-config` as pinned dependencies, TS-specific rules, biome/typecheck pre-commit hooks |
+| `ts` | `tsconfig.json`, `*.ts`, `typescript` dep | `@devkit/tsconfig` + `@devkit/biome-config` + `@devkit/checks` as pinned dependencies, TS-specific rules, the gates for core's checkable rules, biome/comments/typecheck pre-commit hooks |
 | `nest` | `@nestjs/core` dep AND `*.module.ts` usage | NestJS skeleton, role suffixes, layer direction, composition-root and worker conventions |
 
 For a brand-new project: install `foundation`, plan the app using the design tooling you just got,
@@ -167,7 +167,8 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 
 ```json
 "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
-"@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config"
+"@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config",
+"@devkit/checks": "github:Lannister34/devkit#v0.2.0&path:/packages/checks"
 ```
 
 `@devkit/checks` carries the gates Biome has no rule for. `devkit-comments` reads every tracked
