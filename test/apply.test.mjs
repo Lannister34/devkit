@@ -20,6 +20,7 @@ after(() => rmSync(sandbox, { recursive: true, force: true }));
 writeFileSync(join(sandbox, 'gitconfig'), '');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_CONFIG_GLOBAL = join(sandbox, 'gitconfig');
+process.env.XDG_CONFIG_HOME = sandbox;
 
 function project(name, files) {
   const root = join(sandbox, name);
@@ -69,6 +70,78 @@ function devkitShipping(template) {
   writeFileSync(join(root, 'modules', 'hooks', 'templates', 'settings.json'), `${JSON.stringify(template)}\n`);
   return join(root, 'bin', 'apply.mjs');
 }
+
+const ignoredTargets = (summary) => summary.decisions.find((d) => d.path === 'ignored-targets');
+
+test('ignored install targets raise a decision that names each file and the pattern ignoring it', () => {
+  const root = project('ignored', { '.gitignore': '.claude/\n/CLAUDE.md\n' });
+  const { status, summary } = plan(root);
+  assert.equal(status, 3);
+  const decision = ignoredTargets(summary);
+  assert.deepEqual(decision.options, ['track', 'keep']);
+  assert.deepEqual(decision.detail.ignored.map((entry) => entry.path).sort(), [
+    '.claude/agents/code-review.md',
+    '.claude/hooks/approve-review.mjs',
+    '.claude/hooks/require-review.mjs',
+    '.claude/hooks/review-gate.mjs',
+    '.claude/settings.json',
+    '.claude/toolkit.json',
+    'CLAUDE.md',
+  ]);
+  assert.deepEqual(
+    decision.detail.ignored.find((entry) => entry.path === 'CLAUDE.md'),
+    { path: 'CLAUDE.md', pattern: '/CLAUDE.md', source: '.gitignore:2' },
+  );
+});
+
+test('keep settles the ignored-targets decision and persists; track leaves it open until the paths are tracked', () => {
+  const root = project('kept', { '.gitignore': '/CLAUDE.md\n' });
+  const kept = plan(root, '--resolve', 'ignored-targets=keep', '--apply');
+  assert.equal(kept.status, 0);
+  assert.equal(ignoredTargets(kept.summary), undefined);
+  assert.equal(ignoredTargets(plan(root).summary), undefined);
+  const open = project('open', { '.gitignore': '/CLAUDE.md\n' });
+  assert.notEqual(
+    ignoredTargets(plan(open, '--resolve', 'ignored-targets=track').summary),
+    undefined,
+  );
+});
+
+test('a pattern negated later in .gitignore ignores nothing', () => {
+  const root = project('negated', { '.gitignore': '/CLAUDE.md\n!/CLAUDE.md\n' });
+  assert.equal(ignoredTargets(plan(root).summary), undefined);
+});
+
+test('a rule from a global excludes file is reported with its source unquoted', () => {
+  const config = join(sandbox, 'дом');
+  mkdirSync(join(config, 'git'), { recursive: true });
+  writeFileSync(join(config, 'git', 'ignore'), '/CLAUDE.md\n');
+  const root = project('global', {});
+  process.env.XDG_CONFIG_HOME = config;
+  try {
+    const [entry] = ignoredTargets(plan(root).summary).detail.ignored;
+    assert.equal(entry.path, 'CLAUDE.md');
+    assert.ok(entry.source.includes('дом'), entry.source);
+    assert.ok(entry.source.endsWith('/git/ignore:1'), entry.source);
+    assert.ok(!entry.source.startsWith('"'), entry.source);
+  } finally {
+    process.env.XDG_CONFIG_HOME = sandbox;
+  }
+});
+
+test('a repository that ignores none of the targets gets no decision', () => {
+  const root = project('clean', { '.gitignore': 'node_modules/\n' });
+  const { status, summary } = plan(root);
+  assert.equal(status, 0);
+  assert.equal(ignoredTargets(summary), undefined);
+});
+
+test('a tracked file is never reported, whatever .gitignore says about it', () => {
+  const root = project('tracked', { '.gitignore': '/CLAUDE.md\n', 'CLAUDE.md': '# tracked\n' });
+  execFileSync('git', ['-C', root, 'add', '-f', 'CLAUDE.md']);
+  execFileSync('git', ['-C', root, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'i']);
+  assert.equal(ignoredTargets(plan(root).summary), undefined);
+});
 
 test('an upgrade replaces the earlier gate hook entry and keeps the project own hooks', () => {
   const theirs = {

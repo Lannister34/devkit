@@ -16,6 +16,7 @@ after(() => rmSync(sandbox, { recursive: true, force: true }));
 writeFileSync(join(sandbox, 'gitconfig'), '');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_CONFIG_GLOBAL = join(sandbox, 'gitconfig');
+process.env.XDG_CONFIG_HOME = sandbox;
 
 const posix = { cwd: '/repo', shell: 'bash', platform: 'linux', home: '/home/me' };
 const gitBash = {

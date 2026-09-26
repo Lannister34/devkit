@@ -276,6 +276,46 @@ function dropStaleOwned(doc, incoming, ownedArrays) {
   return { doc: copy, replaced };
 }
 
+function findIgnoredTargets(target, modules, actions) {
+  const owned = new Set(modules.flatMap((module) => (module.files ?? []).map((entry) => entry.to)));
+  const disowned = new Set(['kept', 'skip', 'conflict']);
+  const targets = actions.filter((a) => owned.has(a.path) && !disowned.has(a.action)).map((a) => a.path);
+  const paths = [...new Set([...targets, MANIFEST_PATH])];
+  let listing = '';
+  try {
+    listing = execFileSync('git', ['-C', target, 'check-ignore', '--verbose', '-z', '--stdin'], {
+      input: `${paths.join('\0')}\0`,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+  } catch (error) {
+    listing = typeof error?.stdout === 'string' ? error.stdout : '';
+  }
+  const fields = listing.split('\0');
+  const ignored = [];
+  for (let i = 0; i + 4 < fields.length; i += 4) {
+    const [source, line, pattern, path] = fields.slice(i, i + 4);
+    if (!pattern.startsWith('!')) ignored.push({ path, pattern, source: `${source}:${line}` });
+  }
+  return ignored;
+}
+
+function ignoredTargetsDecision(ignored) {
+  return {
+    module: 'devkit',
+    path: 'ignored-targets',
+    action: 'decision',
+    reason: `${ignored.length} of the files this install writes ${ignored.length === 1 ? 'is' : 'are'} ignored by git, so a linked worktree, a fresh clone, or CI runs without them`,
+    options: ['track', 'keep'],
+    detail: {
+      ignored,
+      note:
+        'track = after the install, change .gitignore so these paths are tracked, as its own confirmed commit; a directory pattern such as ".claude/" must become ".claude/*" before a "!" exception can re-include a file in it. ' +
+        'keep = accept that any checkout other than this one works without the rules, the review agent, and the commit gate.',
+    },
+  };
+}
+
 function sectionEdit(existing, body, marker, style) {
   const [open, close] = (MARKERS[style] ?? MARKERS.html)(marker);
   const block = `${open}\n${body.trimEnd()}\n${close}`;
@@ -697,6 +737,9 @@ function main() {
     for (const action of planDependencies(args.target, overlay, module)) record(action);
     for (const entry of module.files ?? []) record(planFile(args.target, overlay, module, entry, vars, resolutions));
   }
+
+  const ignored = findIgnoredTargets(args.target, selected, actions);
+  if (ignored.length > 0 && resolutions['ignored-targets'] !== 'keep') record(ignoredTargetsDecision(ignored));
 
   const conflicts = actions.filter((a) => a.action === 'conflict');
   const decisions = actions.filter((a) => a.action === 'decision');
