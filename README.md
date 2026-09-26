@@ -30,7 +30,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 
 | module | detects on | what it installs |
 |---|---|---|
-| `core` | always | comment whitelist, module-seam and extraction-trigger rules, failure-path rules, commit conventions |
+| `core` | always | gates, comment whitelist, module-seam and surface rules, edge and failure-path rules, test rules |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
 | `git` | `.git` | line-ending normalisation, conventional-commit message hook |
 | `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate bound to each worktree's staged tree |
@@ -161,9 +161,16 @@ JSON — has no flag. It is a migration for a human to decide on, and the instal
 
 Templates are copied verbatim, so a module's output stays diffable against its source.
 
+**Rules and gates.** A rule a tool can check ships with that check, in the toolchain module of each
+stack it applies to; `ts`'s own section names which of core's rules it gates and how. A rule no tool
+can check is left to the review agent, on the terms "The review gate" states. Templates obey the
+rules their install brings: a shipped script carrying a comment is a violation the project did not
+write, so a script template's why lives in this file.
+
 ## Versioning
 
-`ts` installs thin `extends` stubs and pins the real config as git dependencies:
+`ts` installs thin `extends` stubs and pins the real configs, and the checks package, as git
+dependencies:
 
 ```json
 "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
@@ -172,11 +179,11 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 ```
 
 `@devkit/checks` carries the gates Biome has no rule for. `devkit-comments` reads every tracked
-TypeScript, JavaScript and CSS file with the TypeScript parser's own comment ranges — so a regex, a
-template string, or JSX text that looks like a comment is not one — and fails any comment core does
-not allow. On code that already breaks the rule it gates against `.devkit/comments-baseline.json`: a
-file above its count fails, and so does a file below it until the baseline is lowered, so slack
-never accumulates for a new comment to hide in.
+TypeScript and JavaScript file with the TypeScript parser's own comment ranges — so a regex, a
+template string, or JSX text that looks like a comment is not one — and every tracked CSS file with
+a string-aware lexer, and fails any comment core does not allow. On code that already breaks the
+rule it gates against `.devkit/comments-baseline.json`: a file above its count fails, and so does a
+file below it until the baseline is lowered, so no slack accumulates for a new comment to hide in.
 
 So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the
 propagation a copied template never gives you. Installed modules are recorded in the target's
@@ -191,15 +198,17 @@ in half the projects that want the strictness.
 
 ## Status
 
-Verified end to end against a real project: install → `pnpm install` → `tsc` inherits the strict base
-with local overrides intact → `biome` resolves the shared config and flags `noExplicitAny` and
-`noNonNullAssertion`.
+`npm test` is the claim. It covers the review gate's command reader for both shells, every refusal
+and targeting form, its git adapter against a real repository with a linked worktree, and its
+entrypoints against a real repository; the comment gate and its baseline, end to end; the
+`ignored-targets` decision; and the upgrade of devkit-owned hook entries. It needs Node, git, and the
+`typescript` devDependency. The Biome rule names are checked by hand against the pinned schema
+whenever the pin moves, since the suite carries no Biome.
 
-Also verified: detection across project/container/monorepo shapes, planning, apply, idempotent
-re-apply, decisions and their `keep`/`override`/`extend`/`chain`/`merge` resolutions, `--var`
-substitution and persistence, commit-convention and line-ending checks against real repository
-state, and the review gate across its cases (blocked, approved, tree-changed, non-commit command,
-malformed payload).
+Verified once by hand against a real project: install → `pnpm install` → `tsc` inherits the strict
+base with local overrides intact → `biome` resolves the shared config; detection across
+project/container/monorepo shapes; decisions and their resolutions; `--var` substitution and
+persistence; the commit-convention and line-ending checks against real repository state.
 
 Known gap: installing `ts` into a codebase that has never been formatted will rewrite most files on
 the first `biome format` run, and nothing warns about the blast radius yet.
