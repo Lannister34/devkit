@@ -147,7 +147,11 @@ JSON — has no flag. It is a migration for a human to decide on, and the instal
 - `create` — write if absent; identical content is `unchanged`; different content raises a decision
   (`keep` / `override`).
 - `merge-json` — deep merge; arrays union by value; a scalar that disagrees is a conflict. Dependency
-  ranges the project already satisfies are kept silently, not flagged.
+  ranges the project already satisfies are kept silently, not flagged. `ownedArrays` maps a dotted
+  array path to a marker: an element there that carries the marker is devkit's, and one the template
+  no longer ships is replaced rather than kept beside its successor — the plan names each replaced
+  element. A project entry that shares a group with devkit's survives: the group is pruned, not
+  dropped. Keep your own entries free of the marker.
 - `extend-json` — wire an existing config to inherit a devkit base. Raises a decision carrying the
   computed flag-level delta; `compareWith` and `compareKey` say what to diff against.
 - `section` — marker-delimited block, replaced in place on re-run. `markerStyle` is `html`

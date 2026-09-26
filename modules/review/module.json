@@ -11,6 +11,11 @@
     { "from": "templates/review-gate.mjs", "to": ".claude/hooks/review-gate.mjs", "strategy": "create" },
     { "from": "templates/require-review.mjs", "to": ".claude/hooks/require-review.mjs", "strategy": "create" },
     { "from": "templates/approve-review.mjs", "to": ".claude/hooks/approve-review.mjs", "strategy": "create" },
-    { "from": "templates/settings.json", "to": ".claude/settings.json", "strategy": "merge-json" }
+    {
+      "from": "templates/settings.json",
+      "to": ".claude/settings.json",
+      "strategy": "merge-json",
+      "ownedArrays": { "hooks.PreToolUse": "require-review.mjs" }
+    }
   ]
 }
