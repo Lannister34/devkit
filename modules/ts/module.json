@@ -1,7 +1,7 @@
 {
   "name": "ts",
   "phase": "toolchain",
-  "description": "Strict TypeScript compiler options and Biome lint/format.",
+  "description": "Strict TypeScript compiler options, Biome lint/format, and the gates for core's checkable rules.",
   "requires": [
     "core"
   ],

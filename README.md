@@ -186,8 +186,11 @@ rule it gates against `.devkit/comments-baseline.json`: a file above its count f
 file below it until the baseline is lowered, so no slack accumulates for a new comment to hide in.
 
 So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the
-propagation a copied template never gives you. Installed modules are recorded in the target's
-`.claude/toolkit.json`, which makes re-running an *upgrade* rather than a duplicate install.
+propagation a copied template never gives you. On an existing install the bump surfaces as a
+`package.json` conflict, because the applier cannot compare `github:` pins; the init skill sets
+those entries to the module's values itself, before dependencies are installed. Installed modules
+are recorded in the target's `.claude/toolkit.json`, which makes re-running an *upgrade* rather
+than a duplicate install.
 
 **Never pin a tag that does not exist yet.** An unpublished pin breaks `pnpm install` in every
 project that installs the module, and it fails at install time rather than anywhere useful.
@@ -210,5 +213,7 @@ base with local overrides intact → `biome` resolves the shared config; detecti
 project/container/monorepo shapes; decisions and their resolutions; `--var` substitution and
 persistence; the commit-convention and line-ending checks against real repository state.
 
-Known gap: installing `ts` into a codebase that has never been formatted will rewrite most files on
-the first `biome format` run, and nothing warns about the blast radius yet.
+Known gaps: installing `ts` into a codebase that has never been formatted will rewrite most files on
+the first `biome format` run, and nothing warns about the blast radius yet. The ts rule text says
+`noImportCycles` holds the direction half of the surface rule; it holds the cycle half, and a
+lib importing an app with no back edge passes lint — direction stays with review.

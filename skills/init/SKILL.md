@@ -193,6 +193,13 @@ that stalls on everything.
 `apply.mjs` writes files; it does not run package managers. Report which of these are outstanding and
 run them if the user agrees:
 
+- On an upgrade of `ts`, the plan reports `package.json` as a conflict whenever a pin or `lint`
+  already differs, because the applier cannot compare `github:` pins; the whole `package.json`
+  action is then withheld while the same run still writes the `comments` command into
+  `lefthook.yml`. This is the one conflict you resolve yourself, because the three entries are
+  devkit's own values, not the project's: set the `@devkit/*` pins, `@devkit/checks`, and `lint`
+  to the module's values, re-run the plan until `package.json` reports `unchanged`, and only then
+  install — or the next commit fails on a `devkit-comments` that is not there.
 - Install dependencies, if `ts` was installed — its dev dependencies were merged into `package.json`.
 - `lefthook install` — nothing in `lefthook.yml` runs until this happens.
 - Restart the session if `review` was installed or upgraded, so the hook in `.claude/settings.json`
@@ -201,8 +208,9 @@ run them if the user agrees:
   and say why: the hook scripts and the agent are one mechanism, and `keep` on any one of them
   leaves a gate that can never open.
 - On an upgrade of `review` from 0.1.8 or earlier, delete the `devkit:review` block from
-  `.gitignore`: the approval it ignored now lives in the git directory, and no module owns that
-  block any more.
+  `.gitignore` and the stale `.claude/.review-state` it ignored: the approval now lives in the git
+  directory, no module owns that block any more, and the old file would otherwise turn up
+  untracked.
 - If `ts` was installed into existing code, record the comment baseline once
   (`devkit-comments --update-baseline`) and commit `.devkit/comments-baseline.json` with the
   install, so the gate fails only on new comments. Carry the number — "655 comments in 167 files"
