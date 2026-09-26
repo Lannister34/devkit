@@ -148,7 +148,7 @@ test('updating the baseline records it once, then only ever lowers it', () => {
     ['clean.ts', []],
   ];
   assert.deepEqual(lowered(found, null), { 'a.ts': 3, 'b.ts': 1 });
-  assert.deepEqual(lowered(found, { 'a.ts': 1, 'b.ts': 4, 'gone.ts': 2 }), {
+  assert.deepEqual(lowered([...found, ['fresh.ts', [{}]]], { 'a.ts': 1, 'b.ts': 4, 'gone.ts': 2 }), {
     'a.ts': 1,
     'b.ts': 1,
   });
@@ -162,18 +162,27 @@ process.env.GIT_CONFIG_GLOBAL = join(sandbox, 'gitconfig');
 process.env.XDG_CONFIG_HOME = sandbox;
 process.env.GIT_CEILING_DIRECTORIES = dirname(sandbox);
 
-const repo = join(sandbox, 'repo');
-const baselineFile = join(repo, '.devkit', 'comments-baseline.json');
+function repository(name, files) {
+  const dir = join(sandbox, name);
+  execFileSync('git', ['init', '-q', dir]);
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), content);
+    execFileSync('git', ['-C', dir, 'add', path]);
+  }
+  return dir;
+}
+
 const run = (cwd, ...args) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
-const baseline = () => JSON.parse(readFileSync(baselineFile, 'utf8'));
+const baselinePath = (dir) => join(dir, '.devkit', 'comments-baseline.json');
+const baselineOf = (dir) => JSON.parse(readFileSync(baselinePath(dir), 'utf8'));
 
 test('the command gates tracked files against the baseline it records', () => {
-  execFileSync('git', ['init', '-q', repo]);
-  writeFileSync(join(repo, 'legacy.ts'), '// legacy\nexport const a = 1;\n');
-  execFileSync('git', ['-C', repo, 'add', 'legacy.ts']);
+  const repo = repository('ratchet', { 'legacy.ts': '// legacy\nexport const a = 1;\n' });
 
   assert.equal(run(repo).status, 1);
   assert.equal(run(repo, '--update-baseline').status, 0);
+  assert.deepEqual(baselineOf(repo), { 'legacy.ts': 1 });
   assert.equal(run(repo).status, 0);
 
   writeFileSync(join(repo, 'legacy.ts'), '// legacy\n// new\nexport const a = 1;\n');
@@ -184,23 +193,21 @@ test('the command gates tracked files against the baseline it records', () => {
   writeFileSync(join(repo, 'legacy.ts'), 'export const a = 1;\n');
   assert.equal(run(repo).status, 1);
   assert.equal(run(repo, '--update-baseline').status, 0);
-  assert.deepEqual(baseline(), {});
+  assert.deepEqual(baselineOf(repo), {});
 });
 
 test('files are keyed by their path from the repository root, whatever the caller passes', () => {
+  const repo = repository('keys', {
+    'legacy.ts': 'export const a = 1;\n',
+    'pkg/src/deep.ts': '// deep\nexport const d = 1;\n',
+  });
   const pkg = join(repo, 'pkg');
-  mkdirSync(join(pkg, 'src'), { recursive: true });
-  writeFileSync(join(pkg, 'src', 'deep.ts'), '// deep\nexport const d = 1;\n');
-  execFileSync('git', ['-C', repo, 'add', 'pkg/src/deep.ts']);
 
   const fromPackage = run(pkg, 'src/deep.ts');
   assert.equal(fromPackage.status, 1);
   assert.match(fromPackage.stderr, /^pkg\/src\/deep\.ts: 1 comment/m);
   assert.equal(run(pkg, '--update-baseline').status, 0);
-  assert.deepEqual(baseline(), {});
-  rmSync(baselineFile);
-  assert.equal(run(pkg, '--update-baseline').status, 0);
-  assert.deepEqual(baseline(), { 'pkg/src/deep.ts': 1 });
+  assert.deepEqual(baselineOf(repo), { 'pkg/src/deep.ts': 1 });
   assert.equal(run(pkg, 'src/deep.ts').status, 0);
   assert.equal(run(pkg, './src/deep.ts').status, 0);
   assert.equal(run(pkg, join(pkg, 'src', 'deep.ts')).status, 0);
@@ -210,10 +217,15 @@ test('files are keyed by their path from the repository root, whatever the calle
 });
 
 test('the command refuses what it cannot gate, loudly', () => {
+  const repo = repository('refusals', { 'legacy.ts': '// legacy\nexport const a = 1;\n' });
+
   const unknown = run(repo, '--update-baselin');
   assert.equal(unknown.status, 2);
   assert.match(unknown.stderr, /unknown option --update-baselin/);
   assert.equal(run(repo, '-h').status, 2);
+  const named = run(repo, '--update-baseline', 'legacy.ts');
+  assert.equal(named.status, 2);
+  assert.match(named.stderr, /takes no file arguments/);
 
   writeFileSync(join(repo, 'untracked.ts'), '// untracked\n');
   const untracked = run(repo, 'untracked.ts');
@@ -224,17 +236,16 @@ test('the command refuses what it cannot gate, loudly', () => {
   assert.equal(outside.status, 2);
   assert.match(outside.stderr, /git failed/);
 
-  writeFileSync(baselineFile, '{ not json');
+  mkdirSync(dirname(baselinePath(repo)), { recursive: true });
+  writeFileSync(baselinePath(repo), '{ not json');
   const corrupt = run(repo);
   assert.equal(corrupt.status, 2);
   assert.match(corrupt.stderr, /comments-baseline\.json is not valid JSON/);
   assert.equal(run(repo, '--update-baseline').status, 2);
-
-  writeFileSync(baselineFile, '{ "pkg/src/deep.ts": "one" }\n');
+  writeFileSync(baselinePath(repo), '{ "legacy.ts": "one" }\n');
   const malformed = run(repo);
   assert.equal(malformed.status, 2);
   assert.match(malformed.stderr, /must map file paths to whole comment counts/);
-  writeFileSync(baselineFile, '{ "pkg/src/deep.ts": 1 }\n');
 
   const nowhere = run(sandbox);
   assert.equal(nowhere.status, 2);

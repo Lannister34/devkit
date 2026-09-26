@@ -6,14 +6,15 @@ import { compare, lowered } from './comment-baseline.mjs';
 import { disallowedComments, GATED_FILE } from './comment-scan.mjs';
 
 const BASELINE = '.devkit/comments-baseline.json';
-const USAGE = 'devkit-comments [--update-baseline] [--] [files...]';
+const USAGE = 'devkit-comments --update-baseline | devkit-comments [--] [files...]';
 const RECOVERY = 'fix it, or delete it and run devkit-comments --update-baseline';
+const GIT_OUTPUT_LIMIT = 256 * 1024 * 1024;
 
 class UsageError extends Error {}
 
 function git(args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: GIT_OUTPUT_LIMIT });
   } catch (error) {
     const detail = (typeof error?.stderr === 'string' && error.stderr.trim()) || String(error?.message ?? error);
     throw new UsageError(`devkit-comments gates the tracked files of a git repository, and git failed: ${detail}`);
@@ -39,6 +40,9 @@ function parseArguments(argv) {
     if (arg === '--update-baseline') update = true;
     else if (arg.startsWith('-')) throw new UsageError(`unknown option ${arg}; usage: ${USAGE}`);
     else files.push(arg);
+  }
+  if (update && files.length > 0) {
+    throw new UsageError('--update-baseline records every tracked file and takes no file arguments');
   }
   return { update, files };
 }

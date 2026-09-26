@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { findCommits, gitRepo, judge } from '../modules/review/templates/review-gate.mjs';
@@ -17,6 +17,7 @@ writeFileSync(join(sandbox, 'gitconfig'), '');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_CONFIG_GLOBAL = join(sandbox, 'gitconfig');
 process.env.XDG_CONFIG_HOME = sandbox;
+process.env.GIT_CEILING_DIRECTORIES = dirname(sandbox);
 
 const posix = { cwd: '/repo', shell: 'bash', platform: 'linux', home: '/home/me' };
 const gitBash = {

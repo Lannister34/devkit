@@ -21,6 +21,7 @@ writeFileSync(join(sandbox, 'gitconfig'), '');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_CONFIG_GLOBAL = join(sandbox, 'gitconfig');
 process.env.XDG_CONFIG_HOME = sandbox;
+process.env.GIT_CEILING_DIRECTORIES = dirname(sandbox);
 
 function project(name, files) {
   const root = join(sandbox, name);
