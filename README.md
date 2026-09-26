@@ -167,7 +167,7 @@ Templates are copied verbatim, so a module's output stays diffable against its s
 
 ```json
 "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
-"@devkit/biome-config": "github:Lannister34/devkit#v0.1.2&path:/packages/biome-config"
+"@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config"
 ```
 
 So a rule change is a tag plus a pin bump, and it reaches every project that consumes it — the

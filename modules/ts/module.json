@@ -24,7 +24,7 @@
   "dependencies": {
     "devDependencies": {
       "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
-      "@devkit/biome-config": "github:Lannister34/devkit#v0.1.8&path:/packages/biome-config",
+      "@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config",
       "@biomejs/biome": "2.5.9",
       "lefthook": "^1.10.0",
       "typescript": "^5.7.0"
