@@ -5,6 +5,9 @@ pre-commit:
     biome:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
       run: pnpm biome check --staged --no-errors-on-unmatched
+    comments:
+      glob: "*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,css}"
+      run: pnpm devkit-comments {staged_files}
     typecheck:
       glob: "*.{ts,tsx}"
       run: pnpm typecheck

@@ -1,0 +1,24 @@
+{
+  "name": "@devkit/checks",
+  "version": "0.1.0",
+  "description": "Mechanical gates for devkit's core rules.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "devkit-comments": "./comments.mjs"
+  },
+  "files": [
+    "comments.mjs",
+    "comment-scan.mjs",
+    "comment-baseline.mjs"
+  ],
+  "exports": {
+    "./comment-scan": "./comment-scan.mjs",
+    "./comment-baseline": "./comment-baseline.mjs"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0 <7"
+  }
+}

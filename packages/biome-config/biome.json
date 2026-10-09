@@ -30,19 +30,24 @@
         "noConsole": {
           "level": "warn",
           "options": { "allow": ["error", "warn"] }
-        }
+        },
+        "noImportCycles": "error"
       },
       "style": {
         "noNonNullAssertion": "error",
         "useConst": "error",
         "noParameterAssign": "error",
-        "useThrowOnlyError": "error"
+        "useThrowOnlyError": "error",
+        "noProcessEnv": "error"
       },
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "warn",
           "options": { "maxAllowedComplexity": 15 }
         }
+      },
+      "performance": {
+        "noReExportAll": "error"
       },
       "nursery": {
         "useExplicitType": "error"
@@ -55,5 +60,11 @@
       "semicolons": "always",
       "trailingCommas": "all"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/config.*", "**/config/**", "**/*.config.*"],
+      "linter": { "rules": { "style": { "noProcessEnv": "off" } } }
+    }
+  ]
 }

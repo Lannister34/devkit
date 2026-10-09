@@ -142,7 +142,7 @@ disagree are worse than neither — the file stops being trusted.
 change nothing today), **plan** (a written breakdown, saved as an ADR or ticket), or **do it now**
 (only when the user is clear about the size).
 
-**Documentation language** is the one decision whose options are not both flags.
+**Documentation language** is a decision whose options are not both flags.
 
 - **translate** — the applier does nothing with this. Land the install first, then list the affected
   files, get an explicit yes, and translate them as their own commit. Never fold a translation into
@@ -155,6 +155,21 @@ change nothing today), **plan** (a written breakdown, saved as an ADR or ticket)
 
 Commit messages are outside this decision. They are English regardless of what the project uses, so
 do not offer a choice about them.
+
+**Ignored install targets** (`ignored-targets`) is the other decision where one option is work, not
+a flag. The files devkit writes are the project's rules, review agent, and commit gate; ignored by
+git, they exist only in this directory, so a linked worktree, a fresh clone, or CI works without any
+of them — and without the ADRs, if `docs/` is ignored too. The detail names each file, the pattern
+that ignores it, and the file and line the pattern comes from.
+
+- **track** — land the install first, then show the `.gitignore` change and make it only on an
+  explicit yes, as its own commit. A directory pattern such as `.claude/` must become `.claude/*`
+  before a `!` exception can re-include a file under it; say so rather than adding an exception
+  that silently does nothing. When the source is not a `.gitignore` the repository shares —
+  `.git/info/exclude`, a global excludes file — `track` means `git add -f` on those paths, on the
+  same explicit yes. The decision stays open until the paths are actually tracked.
+- **keep** — legitimate when the owner keeps these files private on purpose. State the cost, then
+  pass `--resolve ignored-targets=keep`.
 
 Either way, carry the numbers. "417 errors, roughly 230 mechanical and 180 real type errors" is a
 decision. "There is a conflict" is not.
@@ -178,9 +193,29 @@ that stalls on everything.
 `apply.mjs` writes files; it does not run package managers. Report which of these are outstanding and
 run them if the user agrees:
 
+- On an upgrade of `ts`, the plan reports `package.json` as a conflict whenever a pin or `lint`
+  already differs, because the applier cannot compare `github:` pins; the whole `package.json`
+  action is then withheld while the same run still writes the `comments` command into
+  `lefthook.yml`. This is the one conflict you resolve yourself, because the three entries are
+  devkit's own values, not the project's: set the `@devkit/*` pins, `@devkit/checks`, and `lint`
+  to the module's values, re-run the plan until `package.json` reports `unchanged`, and only then
+  install — or the next commit fails on a `devkit-comments` that is not there.
 - Install dependencies, if `ts` was installed — its dev dependencies were merged into `package.json`.
 - `lefthook install` — nothing in `lefthook.yml` runs until this happens.
-- Restart the session if `review` was newly installed, so the hook in `.claude/settings.json` loads.
+- Restart the session if `review` was installed or upgraded, so the hook in `.claude/settings.json`
+  loads.
+- On an upgrade of `review`, recommend `override` for every file the module owns under `.claude/`,
+  and say why: the hook scripts and the agent are one mechanism, and `keep` on any one of them
+  leaves a gate that can never open.
+- On an upgrade of `review` from 0.1.8 or earlier, delete the `devkit:review` block from
+  `.gitignore` and the stale `.claude/.review-state` it ignored: the approval now lives in the git
+  directory, no module owns that block any more, and the old file would otherwise turn up
+  untracked.
+- If `ts` was installed into existing code, record the comment baseline once
+  (`devkit-comments --update-baseline`) and commit `.devkit/comments-baseline.json` with the
+  install, so the gate fails only on new comments. Carry the number — "655 comments in 167 files"
+  is the size of the cleanup — and treat the cleanup as separate work, one module per slice, each
+  invariant moved into a test or a document before its comment goes.
 
 Then verify rather than assume: lint and typecheck should actually run clean. On a fresh
 seed, run the formatter once first (`pnpm format`) so devkit's own written files match it; on an

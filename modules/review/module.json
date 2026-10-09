@@ -1,15 +1,21 @@
 {
   "name": "review",
   "phase": "foundation",
-  "description": "Five-axis code-review agent, triggered automatically before every commit.",
+  "description": "Code-review agent that blocks on the project's rules, and a commit gate bound to each worktree's staged tree.",
   "requires": ["core"],
   "detect": { "anyOf": ["file:.git"] },
   "conflicts": [],
   "files": [
     { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "review" },
     { "from": "templates/code-review.md", "to": ".claude/agents/code-review.md", "strategy": "create" },
+    { "from": "templates/review-gate.mjs", "to": ".claude/hooks/review-gate.mjs", "strategy": "create" },
     { "from": "templates/require-review.mjs", "to": ".claude/hooks/require-review.mjs", "strategy": "create" },
-    { "from": "templates/settings.json", "to": ".claude/settings.json", "strategy": "merge-json" },
-    { "from": "templates/gitignore", "to": ".gitignore", "strategy": "section", "marker": "review", "markerStyle": "hash" }
+    { "from": "templates/approve-review.mjs", "to": ".claude/hooks/approve-review.mjs", "strategy": "create" },
+    {
+      "from": "templates/settings.json",
+      "to": ".claude/settings.json",
+      "strategy": "merge-json",
+      "ownedArrays": { "hooks.PreToolUse": "require-review.mjs" }
+    }
   ]
 }

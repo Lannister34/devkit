@@ -1,7 +1,7 @@
 {
   "name": "core",
   "phase": "foundation",
-  "description": "Language-agnostic engineering rules: comments, module seams, failure paths, documentation.",
+  "description": "Language-agnostic engineering rules: gates, comments, module seams and surfaces, edges, failure paths, tests, documentation.",
   "requires": [],
   "detect": { "always": true },
   "conflicts": [],

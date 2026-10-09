@@ -222,6 +222,100 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function atPath(doc, keys) {
+  return keys.reduce((node, key) => (isPlainObject(node) ? node[key] : undefined), doc);
+}
+
+function pruneOwned(value, marker, current, dropped) {
+  if (Array.isArray(value)) {
+    const kept = [];
+    for (const item of value) {
+      const text = JSON.stringify(item);
+      if (current.has(text) || !text.includes(marker)) {
+        kept.push(item);
+        continue;
+      }
+      const inner = [];
+      const pruned = pruneOwned(item, marker, current, inner);
+      if (pruned === undefined) dropped.push(item);
+      else {
+        kept.push(pruned);
+        dropped.push(...inner);
+      }
+    }
+    return kept.length === 0 ? undefined : kept;
+  }
+  if (isPlainObject(value)) {
+    const copy = {};
+    const inner = [];
+    for (const [key, item] of Object.entries(value)) {
+      const pruned = JSON.stringify(item).includes(marker) ? pruneOwned(item, marker, current, inner) : item;
+      if (pruned === undefined) return undefined;
+      copy[key] = pruned;
+    }
+    dropped.push(...inner);
+    return copy;
+  }
+  return undefined;
+}
+
+function dropStaleOwned(doc, incoming, ownedArrays) {
+  const copy = structuredClone(doc);
+  const replaced = [];
+  for (const [dotted, marker] of Object.entries(ownedArrays ?? {})) {
+    const keys = dotted.split('.');
+    const last = keys.pop();
+    const parent = atPath(copy, keys);
+    if (!isPlainObject(parent) || !Array.isArray(parent[last])) continue;
+    const wanted = atPath(incoming, keys)?.[last];
+    const current = new Set((Array.isArray(wanted) ? wanted : []).map((item) => JSON.stringify(item)));
+    const dropped = [];
+    parent[last] = pruneOwned(parent[last], marker, current, dropped) ?? [];
+    for (const item of dropped) replaced.push({ path: dotted, item });
+  }
+  return { doc: copy, replaced };
+}
+
+function findIgnoredTargets(target, modules, actions) {
+  const owned = new Set(modules.flatMap((module) => (module.files ?? []).map((entry) => entry.to)));
+  const disowned = new Set(['kept', 'skip', 'conflict']);
+  const targets = actions.filter((a) => owned.has(a.path) && !disowned.has(a.action)).map((a) => a.path);
+  const paths = [...new Set([...targets, MANIFEST_PATH])];
+  let listing = '';
+  try {
+    listing = execFileSync('git', ['-C', target, 'check-ignore', '--verbose', '-z', '--stdin'], {
+      input: `${paths.join('\0')}\0`,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+  } catch (error) {
+    listing = typeof error?.stdout === 'string' ? error.stdout : '';
+  }
+  const fields = listing.split('\0');
+  const ignored = [];
+  for (let i = 0; i + 4 < fields.length; i += 4) {
+    const [source, line, pattern, path] = fields.slice(i, i + 4);
+    if (!pattern.startsWith('!')) ignored.push({ path, pattern, source: `${source}:${line}` });
+  }
+  return ignored;
+}
+
+function ignoredTargetsDecision(ignored) {
+  return {
+    module: 'devkit',
+    path: 'ignored-targets',
+    action: 'decision',
+    reason: `${ignored.length} of the files this install writes ${ignored.length === 1 ? 'is' : 'are'} ignored by git, so a linked worktree, a fresh clone, or CI runs without them`,
+    options: ['track', 'keep'],
+    detail: {
+      ignored,
+      note:
+        'track = after the install, change .gitignore so these paths are tracked, as its own confirmed commit; a directory pattern such as ".claude/" must become ".claude/*" before a "!" exception can re-include a file in it. ' +
+        'keep = accept that any checkout other than this one works without the rules, the review agent, and the commit gate.',
+    },
+  };
+}
+
 function sectionEdit(existing, body, marker, style) {
   const [open, close] = (MARKERS[style] ?? MARKERS.html)(marker);
   const block = `${open}\n${body.trimEnd()}\n${close}`;
@@ -537,14 +631,17 @@ function planFile(target, overlay, module, entry, vars, resolutions) {
     if (existing === null) {
       return { module: module.name, path: to, action: 'create', content: `${JSON.stringify(incoming, null, 2)}\n` };
     }
-    const base = JSON.parse(existing);
+    const { doc: base, replaced } = dropStaleOwned(JSON.parse(existing), incoming, entry.ownedArrays);
     const conflicts = [];
     const merged = deepMerge(base, incoming, to, conflicts);
     const content = `${JSON.stringify(merged, null, 2)}\n`;
     if (conflicts.length > 0) {
       return { module: module.name, path: to, action: 'conflict', reason: conflicts.map((c) => `${c.path}: has ${JSON.stringify(c.existing)}, wants ${JSON.stringify(c.incoming)}`).join('; ') };
     }
-    return { module: module.name, path: to, action: content === existing ? 'unchanged' : 'merge', content };
+    const action = { module: module.name, path: to, action: content === existing ? 'unchanged' : 'merge', content };
+    if (replaced.length === 0) return action;
+    const paths = [...new Set(replaced.map((entry) => entry.path))].join(', ');
+    return { ...action, reason: `replaces ${replaced.length} earlier devkit entry(ies) in ${paths}`, detail: { replaced } };
   }
 
   throw new Error(`unknown strategy "${entry.strategy}" in module ${module.name}`);
@@ -641,6 +738,9 @@ function main() {
     for (const entry of module.files ?? []) record(planFile(args.target, overlay, module, entry, vars, resolutions));
   }
 
+  const ignored = findIgnoredTargets(args.target, selected, actions);
+  if (ignored.length > 0 && resolutions['ignored-targets'] !== 'keep') record(ignoredTargetsDecision(ignored));
+
   const conflicts = actions.filter((a) => a.action === 'conflict');
   const decisions = actions.filter((a) => a.action === 'decision');
   const inert = new Set(['unchanged', 'conflict', 'decision', 'skip', 'kept']);
@@ -656,7 +756,7 @@ function main() {
     version,
     applied: args.apply,
     modules: selected.map((m) => m.name),
-    changes: changes.map(({ module, path, action }) => ({ module, path, action })),
+    changes: changes.map(({ module, path, action, reason, detail }) => ({ module, path, action, ...(reason && { reason }), ...(detail && { detail }) })),
     unchanged: actions.filter((a) => a.action === 'unchanged').map(({ module, path }) => ({ module, path })),
     kept: actions.filter((a) => a.action === 'kept').map(({ module, path, reason }) => ({ module, path, reason })),
     skipped: actions.filter((a) => a.action === 'skip').map(({ module, path, reason }) => ({ module, path, reason })),
@@ -671,7 +771,9 @@ function main() {
   } else {
     const label = args.apply ? 'applied' : 'plan (nothing written — pass --apply)';
     process.stdout.write(`devkit ${version} → ${relative(process.cwd(), args.target) || '.'} [${label}]\n\n`);
-    for (const { module, path, action } of summary.changes) process.stdout.write(`  ${action.padEnd(15)} ${path}  (${module})\n`);
+    for (const { module, path, action, reason } of summary.changes) {
+      process.stdout.write(`  ${action.padEnd(15)} ${path}  (${module})${reason ? ` — ${reason}` : ''}\n`);
+    }
     for (const { path } of summary.unchanged) process.stdout.write(`  ${'unchanged'.padEnd(15)} ${path}\n`);
     for (const { path, reason } of summary.kept) process.stdout.write(`  ${'kept'.padEnd(15)} ${path} — ${reason}\n`);
     for (const { path, reason } of summary.skipped) process.stdout.write(`  ${'skipped'.padEnd(15)} ${path} — ${reason}\n`);
