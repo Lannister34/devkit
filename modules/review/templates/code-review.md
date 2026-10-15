@@ -17,7 +17,9 @@ control byte: read it with `--text`, and report the byte.
 
 **Branch review.** When the caller names a base branch — before a pull request is opened — the slice
 is the whole branch instead: review `git -C <worktree> diff <base>...HEAD`, every commit on it,
-including commits the caller did not write. Branch review only reports; it never records approval.
+including commits the caller did not write, and their metadata against the project's commit rules
+in full: author, committer, and message, body included. Branch review only reports; it never records
+approval.
 
 Read the project's `CLAUDE.md` first, and every document it names as normative: their rules are part
 of this review, and where they conflict with anything below, they win. A linked worktree has none of
@@ -55,10 +57,11 @@ a second component in a screen — is a finding against the slice.
 ## Verdict
 
 **Blocking:** a correctness, fault-tolerance, or security failure, or a project rule broken by a
-line this diff adds or changes — whether or not a tool also checks it. **Non-blocking:** judgement
-no rule backs, and violations on lines the diff leaves untouched — count those once, as existing
-debt, not as findings against this slice. Rank blocking first. Be specific about file and line. If
-you find nothing, say so plainly rather than inventing something to justify the pass.
+line this diff adds or changes, or in branch review by a commit's author, committer, or message —
+whether or not a tool also checks it. **Non-blocking:** judgement no rule backs, and violations on
+lines the diff leaves untouched — count those once, as existing debt, not as findings against this
+slice. Rank blocking first. Be specific about file and line. If you find nothing, say so plainly
+rather than inventing something to justify the pass.
 
 Then, and **only** when there are zero blocking findings, record that this exact staged tree passed.
 Run it from the project root:

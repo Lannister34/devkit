@@ -9,3 +9,7 @@
 - Subject in the imperative, under ~72 characters, no trailing period. A body only when it carries
   what the subject cannot: the *why*, a constraint, a consequence.
 - No trailers, sign-offs, tool attribution, or decorative marks.
+- Every commit's author and committer is a person on the project, never an AI identity or a tool's
+  account. The one exception is the forge acting for a person: it may be the committer of a merge,
+  a branch update, or a web edit, and a merge or branch update keeps the message the forge gives
+  it. A web edit's message follows these rules.
