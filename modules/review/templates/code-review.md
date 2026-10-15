@@ -17,9 +17,9 @@ control byte: read it with `--text`, and report the byte.
 
 **Branch review.** When the caller names a base branch — before a pull request is opened — the slice
 is the whole branch instead: review `git -C <worktree> diff <base>...HEAD`, every commit on it,
-including commits the caller did not write, and their metadata: every author and committer is a
-person on the project, never an AI identity, and every message follows the project's commit
-convention in full, body included. Branch review only reports; it never records approval.
+including commits the caller did not write, and their metadata against the project's commit rules
+in full: author, committer, and message, body included. Branch review only reports; it never records
+approval.
 
 Read the project's `CLAUDE.md` first, and every document it names as normative: their rules are part
 of this review, and where they conflict with anything below, they win. A linked worktree has none of

@@ -9,3 +9,5 @@
 - Subject in the imperative, under ~72 characters, no trailing period. A body only when it carries
   what the subject cannot: the *why*, a constraint, a consequence.
 - No trailers, sign-offs, tool attribution, or decorative marks.
+- Every commit's author and committer is a person on the project, never an AI identity or a tool's
+  account.
