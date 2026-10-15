@@ -57,10 +57,11 @@ a second component in a screen — is a finding against the slice.
 ## Verdict
 
 **Blocking:** a correctness, fault-tolerance, or security failure, or a project rule broken by a
-line this diff adds or changes — whether or not a tool also checks it. **Non-blocking:** judgement
-no rule backs, and violations on lines the diff leaves untouched — count those once, as existing
-debt, not as findings against this slice. Rank blocking first. Be specific about file and line. If
-you find nothing, say so plainly rather than inventing something to justify the pass.
+line this diff adds or changes, or in branch review by a commit's author, committer, or message —
+whether or not a tool also checks it. **Non-blocking:** judgement no rule backs, and violations on
+lines the diff leaves untouched — count those once, as existing debt, not as findings against this
+slice. Rank blocking first. Be specific about file and line. If you find nothing, say so plainly
+rather than inventing something to justify the pass.
 
 Then, and **only** when there are zero blocking findings, record that this exact staged tree passed.
 Run it from the project root:
