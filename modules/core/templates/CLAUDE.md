@@ -171,12 +171,13 @@ the next one.
 
 ## Tests
 
-A slice that adds behaviour adds its tests in the same commit. Tests are deterministic: no wall
-clock, no network, no dependence on execution order. Assert on observable behaviour, not internals —
-a test that breaks when you rename a private method is a maintenance tax, not a check.
+A slice that adds behaviour adds its tests in the same commit. Tests are deterministic: no wall clock,
+no network beyond a local, disposable instance of a dependency, no dependence on execution order.
+Assert on observable behaviour, not internals — a test that breaks when you rename a private method is
+a maintenance tax, not a check.
 
-A test earns its place by catching a mistake someone could plausibly make. Besides the boundary tests
-below, three things add one:
+A test earns its place by catching a mistake someone could plausibly make. Besides the edge and
+boundary tests below, three things add one:
 
 - **A fix** adds the test that fails before it and passes after it — or, when the toolchain should
   have caught the bug, the tightened type or lint rule that does (see Bugs).
@@ -187,10 +188,17 @@ below, three things add one:
 A test that restates a value the code already states — a list of names, a threshold, a timeout, a
 message — is not a check. The code, and its TODO when it has one, is the record; a copy only makes a
 deliberate change cost two edits. Whether a value is valid is checked by the code that loads it, not
-by a test per value. A relation between values is different: the invariant a removed comment
-carried, or two places that must agree where a mismatch would fail silently — a permission policy
-and the calls it must allow — gets a named test that derives what it checks from code rather than
-copying it.
+by a test per value. A relation between values is different: the invariant a removed comment carried,
+or two places that must agree where a mismatch would fail silently — a permission policy and the calls
+it must allow — gets a named test that derives what it checks from code rather than copying it.
+
+Unit tests cover decisions, which the layering rule keeps pure. What they cannot see is the edge: a
+query against a real database engine, a route registered with its auth, a payload another service
+parses, a write that must roll back. Each edge a slice adds or changes gets an integration test
+against a local, disposable instance of the dependency — a container, an in-memory server — never a
+shared or live one, covering the path that carries the risk, not every combination. A flow whose
+failure costs money or access, such as a payment reaching the account or a sign-in, gets one
+end-to-end test through its real entry point, on the same local, disposable dependencies.
 
 An assumption about something outside the process — how a protocol signals completion and errors,
 which parameters a provider accepts, how the platform encodes text, folds case in file names, or
