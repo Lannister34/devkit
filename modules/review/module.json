@@ -8,6 +8,11 @@
   "files": [
     { "from": "templates/CLAUDE.md", "to": "CLAUDE.md", "strategy": "section", "marker": "review" },
     { "from": "templates/code-review.md", "to": ".claude/agents/code-review.md", "strategy": "create" },
+    { "from": "templates/shell-lexer.mjs", "to": ".claude/hooks/shell-lexer.mjs", "strategy": "create" },
+    { "from": "templates/path-resolver.mjs", "to": ".claude/hooks/path-resolver.mjs", "strategy": "create" },
+    { "from": "templates/commit-reader.mjs", "to": ".claude/hooks/commit-reader.mjs", "strategy": "create" },
+    { "from": "templates/hook-payload.mjs", "to": ".claude/hooks/hook-payload.mjs", "strategy": "create" },
+    { "from": "templates/git-state.mjs", "to": ".claude/hooks/git-state.mjs", "strategy": "create" },
     { "from": "templates/review-gate.mjs", "to": ".claude/hooks/review-gate.mjs", "strategy": "create" },
     { "from": "templates/require-review.mjs", "to": ".claude/hooks/require-review.mjs", "strategy": "create" },
     { "from": "templates/approve-review.mjs", "to": ".claude/hooks/approve-review.mjs", "strategy": "create" },

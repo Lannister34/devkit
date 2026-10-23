@@ -13,13 +13,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  findCommits,
-  gitRepo,
-  judge,
-  SHELL_BY_TOOL,
-  toolCommand,
-} from '../modules/review/templates/review-gate.mjs';
+import { findCommits } from '../modules/review/templates/commit-reader.mjs';
+import { gitRepo } from '../modules/review/templates/git-state.mjs';
+import { SHELL_BY_TOOL, toolCommand } from '../modules/review/templates/hook-payload.mjs';
+import { isUncOrDevice, pathResolver } from '../modules/review/templates/path-resolver.mjs';
+import { judge } from '../modules/review/templates/review-gate.mjs';
 
 const MODULE = fileURLToPath(new URL('../modules/review/', import.meta.url));
 const TEMPLATES = join(MODULE, 'templates');
@@ -161,6 +159,9 @@ EOF`,
     [{ dir: String.raw`D:\Neuro\wt` }],
   ],
   ['Git Bash path with no drive mapping', 'git -C /tmp/wt commit -m x', gitBash, [unreadable]],
+  ['-C a UNC path is unreadable, never resolved', String.raw`git -C "\\host\share" commit -m x`, powershell, [unreadable]],
+  ['cd into a UNC path leaves nowhere the gate can follow', String.raw`cd \\host\share; git commit -m x`, powershell, [unfollowable]],
+  ['-C a device path is unreadable', String.raw`git -C "\\?\D:\wt" commit -m x`, powershell, [unreadable]],
   ['-C the gate cannot read', 'git -C "$WT" commit -m x', posix, [unreadable]],
   ['-C an unquoted variable', 'git -C $WT commit -m x', posix, [unreadable]],
   ['-C a substitution', 'git -C "$(pwd)/wt" commit -m x', posix, [unreadable]],
@@ -470,19 +471,44 @@ test('the hook registration matches exactly the tools the gate reads', () => {
   assert.deepEqual(registration.matcher.split('|').sort(), [...SHELL_BY_TOOL.keys()].sort());
 });
 
-test('judge passes an approved tree, blocks an unapproved one, and fails open on git errors', () => {
+const judgeOpts = (worktrees) => ({ approveScript: 'approve.mjs', worktrees, platform: 'linux' });
+
+test('judge passes an approved tree, blocks an unapproved one, and notes a git failure without blocking', () => {
   const trees = {
     '/ok': { staged: 't1', approved: 't1' },
     '/new': { staged: 't2', approved: 't1' },
   };
-  const repo = { trees: (dir) => trees[dir] ?? null };
-  assert.deepEqual(judge([{ dir: '/ok' }], repo, 'approve.mjs'), []);
-  assert.deepEqual(judge([{ dir: '/broken' }], repo, 'approve.mjs'), []);
-  const [reason] = judge([{ dir: '/new' }], repo, 'approve.mjs');
-  assert.match(reason, /node "approve\.mjs" "\/new"/);
+  const repo = {
+    trees: (dir) => {
+      if (dir === '/broken') throw new Error('write-tree exploded');
+      return trees[dir] ?? null;
+    },
+  };
+  const opts = judgeOpts(['/ok', '/new', '/broken']);
+  assert.deepEqual(judge([{ dir: '/ok' }], repo, opts), { blocks: [], notes: [] });
+
+  const broken = judge([{ dir: '/broken' }], repo, opts);
+  assert.deepEqual(broken.blocks, []);
+  assert.match(broken.notes[0], /write-tree exploded/);
+
+  const { blocks } = judge([{ dir: '/new' }], repo, opts);
+  assert.match(blocks[0], /has not been reviewed/);
+  assert.match(blocks[0], /approve\.mjs/);
+  assert.match(blocks[0], /t2/);
 });
 
-test('judge blocks what it cannot judge without asking git', () => {
+test('judge never runs git on a directory outside the project worktrees', () => {
+  const repo = {
+    trees: () => {
+      throw new Error('git must not be touched');
+    },
+  };
+  const opts = judgeOpts(['/repo']);
+  assert.deepEqual(judge([{ dir: '/elsewhere' }], repo, opts), { blocks: [], notes: [] });
+  assert.deepEqual(judge([{ dir: '/repo-sibling' }], repo, opts), { blocks: [], notes: [] });
+});
+
+test('judge refuses what it cannot locate, and staged or hook-skipping commits in the project, without asking git', () => {
   const repo = {
     trees: () => {
       throw new Error('git must not be asked');
@@ -492,12 +518,52 @@ test('judge blocks what it cannot judge without asking git', () => {
     { unresolved: 'GIT_DIR' },
     { dir: '/a', stages: '-a' },
     { dir: '/a', skipsHooks: true },
+    { dir: '/outside', stages: '-a' },
   ];
-  const reasons = judge(commits, repo, 'approve.mjs');
-  assert.equal(reasons.length, 3);
-  assert.match(reasons[0], /git -C <literal path> commit/);
-  assert.match(reasons[1], /Stage with `git add`/);
-  assert.match(reasons[2], /Fix what the hooks report/);
+  const { blocks } = judge(commits, repo, judgeOpts(['/a']));
+  assert.equal(blocks.length, 3);
+  assert.match(blocks[0], /git -C <literal path> commit/);
+  assert.match(blocks[1], /Stage with `git add`/);
+  assert.match(blocks[2], /Fix what the hooks report/);
+});
+
+test('the path resolver refuses UNC and device paths so git never touches them', () => {
+  assert.equal(isUncOrDevice(String.raw`\\host\share`, 'win32'), true);
+  assert.equal(isUncOrDevice(String.raw`\\?\D:\x`, 'win32'), true);
+  assert.equal(isUncOrDevice(String.raw`D:\x`, 'win32'), false);
+  assert.equal(isUncOrDevice('//host/share', 'linux'), false);
+  const resolve = pathResolver({ platform: 'win32', shell: 'powershell', home: String.raw`C:\Users\me` });
+  assert.equal(resolve(String.raw`D:\repo`, String.raw`\\host\share`), null);
+  assert.equal(resolve(String.raw`D:\repo`, '//host/share'), null);
+  assert.equal(resolve(String.raw`D:\repo`, String.raw`wt`), String.raw`D:\repo\wt`);
+});
+
+test('every git call the gate makes disables fsmonitor', () => {
+  const calls = [];
+  const exec = (_cmd, args) => {
+    calls.push(args);
+    if (args.includes('worktree')) return 'worktree /repo\n';
+    if (args.includes('rev-parse')) return '/repo/.git/devkit-review-state\n';
+    return 'abc\n';
+  };
+  const repo = gitRepo({
+    exec,
+    read: () => {
+      throw new Error('no state file');
+    },
+    write: () => {},
+  });
+  repo.worktrees('/repo');
+  repo.trees('/repo');
+  repo.approve('/repo', 'abc');
+  assert.ok(calls.length >= 3);
+  for (const args of calls) {
+    const at = args.indexOf('-c');
+    assert.ok(
+      at !== -1 && args[at + 1] === 'core.fsmonitor=false',
+      `fsmonitor not disabled in: git ${args.join(' ')}`,
+    );
+  }
 });
 
 const git = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
@@ -533,42 +599,77 @@ test('approval state lives in each worktree git dir, so one worktree never appro
   assert.equal(git(linked, 'status', '--porcelain', '--ignored').includes('review-state'), false);
 });
 
-const hook = (payload) =>
+function childEnv(projectDir) {
+  const env = { ...process.env };
+  if (projectDir) env.CLAUDE_PROJECT_DIR = projectDir;
+  else delete env.CLAUDE_PROJECT_DIR;
+  return env;
+}
+const hook = (payload, projectDir) =>
   spawnSync(process.execPath, [HOOK], {
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
     encoding: 'utf8',
+    env: childEnv(projectDir),
   });
 const bash = (command, cwd) => ({ tool_name: 'Bash', tool_input: { command }, cwd });
+const approveRun = (...args) => spawnSync(process.execPath, [APPROVE, ...args], { encoding: 'utf8' });
 
 test('the hook entrypoint fails open on what it cannot read, blocks an unreviewed tree, and honours the approval entrypoint', () => {
   const dir = repository('hooked');
   stage(dir, 'a.txt');
-  assert.equal(hook('{not json').status, 0);
-  assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: 'x' }, cwd: dir }).status, 0);
-  assert.equal(hook(bash('git commit --dry-run', dir)).status, 0);
-  assert.equal(hook(bash('git commit -m x', sandbox)).status, 0);
+  const brokenInput = hook('{not json', dir);
+  assert.equal(brokenInput.status, 0);
+  assert.match(brokenInput.stderr, /failed open/);
+  assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: 'x' }, cwd: dir }, dir).status, 0);
+  assert.equal(hook(bash('git commit --dry-run', dir), dir).status, 0);
+  assert.equal(hook(bash('git commit -m x', sandbox), sandbox).status, 0);
 
-  const blocked = hook(bash('git commit -m x', dir));
+  const blocked = hook(bash('git commit -m x', dir), dir);
   assert.equal(blocked.status, 2);
   assert.match(blocked.stderr, /has not been reviewed/);
   assert.match(blocked.stderr, /approve-review\.mjs/);
-  const staged = hook(bash('git commit -am x', dir));
+  const staged = hook(bash('git commit -am x', dir), dir);
   assert.equal(staged.status, 2);
   assert.match(staged.stderr, /stages files itself/);
 
-  const refused = spawnSync(process.execPath, [APPROVE, sandbox], { encoding: 'utf8' });
+  const refused = approveRun(sandbox, 'deadbeef');
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /Approval not recorded/);
-  const approved = spawnSync(process.execPath, [APPROVE, dir], { encoding: 'utf8' });
+  const approved = approveRun(dir, git(dir, 'write-tree'));
   assert.equal(approved.status, 0);
   assert.match(approved.stdout, /^Approved [0-9a-f]{40} for /);
-  assert.equal(hook(bash('git commit -m x', dir)).status, 0);
+  assert.equal(hook(bash('git commit -m x', dir), dir).status, 0);
   const viaPowerShell = { tool_name: 'PowerShell', tool_input: { command: `git -C "${dir}" commit -m x` }, cwd: sandbox };
-  assert.equal(hook(viaPowerShell).status, 0);
+  assert.equal(hook(viaPowerShell, dir).status, 0);
 
   stage(dir, 'b.txt');
-  assert.equal(hook(bash('git commit -m x', dir)).status, 2);
-  assert.equal(hook(viaPowerShell).status, 2);
+  assert.equal(hook(bash('git commit -m x', dir), dir).status, 2);
+  assert.equal(hook(viaPowerShell, dir).status, 2);
+});
+
+test('a commit whose directory is outside the project worktrees is left for the user, not judged', () => {
+  const project = repository('scoped-project');
+  const other = repository('scoped-other');
+  stage(other, 'a.txt');
+  assert.equal(hook(bash(`git -C "${other}" commit -m x`, project), project).status, 0);
+});
+
+test('approve-review records the reviewed tree and refuses when the staged tree changed since', () => {
+  const dir = repository('approving');
+  stage(dir, 'a.txt');
+  const reviewed = git(dir, 'write-tree');
+  const missingTree = approveRun(dir);
+  assert.equal(missingTree.status, 1);
+  assert.match(missingTree.stderr, /tree id you reviewed/);
+
+  stage(dir, 'b.txt');
+  const stale = approveRun(dir, reviewed);
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /review the current tree/);
+
+  const ok = approveRun(dir, git(dir, 'write-tree'));
+  assert.equal(ok.status, 0);
+  assert.match(ok.stdout, /^Approved/);
 });
 
 test('the registered hook loads from the project root with no shell, whatever directory it starts in', () => {
@@ -581,7 +682,12 @@ test('the registered hook loads from the project root with no shell, whatever di
   const [entry] = registration.hooks;
   const args = entry.args.map((arg) => arg.replaceAll('${CLAUDE_PROJECT_DIR}', project));
   const registered = (payload) =>
-    spawnSync(entry.command, args, { cwd: sandbox, input: JSON.stringify(payload), encoding: 'utf8' });
+    spawnSync(entry.command, args, {
+      cwd: sandbox,
+      input: JSON.stringify(payload),
+      encoding: 'utf8',
+      env: childEnv(project),
+    });
 
   const monitored = registered(commitIn('Monitor', project));
   assert.equal(monitored.status, 2, monitored.stderr);
@@ -589,6 +695,10 @@ test('the registered hook loads from the project root with no shell, whatever di
   const terminal = registered(commitIn('mcp__terminal__run_in_terminal', sandbox, { cwd: project }));
   assert.equal(terminal.status, 2, terminal.stderr);
 
-  spawnSync(process.execPath, [join(project, '.claude/hooks/approve-review.mjs'), project]);
+  spawnSync(
+    process.execPath,
+    [join(project, '.claude/hooks/approve-review.mjs'), project, git(project, 'write-tree')],
+    { encoding: 'utf8' },
+  );
   assert.equal(registered(commitIn('Monitor', project)).status, 0);
 });

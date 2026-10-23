@@ -61,11 +61,16 @@ debt, not as findings against this slice. Rank blocking first. Be specific about
 you find nothing, say so plainly rather than inventing something to justify the pass.
 
 Then, and **only** when there are zero blocking findings, record that this exact staged tree passed.
-Run it from the project root:
+Capture the tree you reviewed and pass it, so a change staged after the review cannot be approved by
+it. Capture it as part of this review, with nothing staged in between:
 
 ```
-node .claude/hooks/approve-review.mjs <worktree>
+git -C <worktree> write-tree
+node .claude/hooks/approve-review.mjs <worktree> <tree>
 ```
+
+`<tree>` is the id `write-tree` printed. `approve-review.mjs` recomputes the staged tree and refuses
+to record when it differs, so if anything was staged after you reviewed, re-review before approving.
 
 If anything is blocking, do not run it. An unrecorded approval is what keeps the commit gate closed
 until the finding is addressed.

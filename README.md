@@ -33,7 +33,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 | `core` | always | gates, comment whitelist, module-seam and surface rules, edge and failure-path rules, test rules |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
 | `git` | `.git` | line-ending normalisation, conventional-commit message hook that also passes git's merge and revert subjects |
-| `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate bound to each worktree's staged tree |
+| `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate on the project's own worktrees, bound to the reviewed tree |
 
 `git` and `review` are gated on the target being a repository root, so a folder that merely *contains*
 projects gets the rules without hooks that could never fire.
@@ -58,31 +58,46 @@ then re-run for the toolchain once the stack is real.
    elsewhere, where fish's `and`, `or` and `not` count as prefixes. Quoted text and heredoc or
    here-string bodies are data, so a message or a note that mentions `git commit` is not one.
 2. For each `git commit` it finds, it resolves the worktree the commit targets — where the command
-   starts, then any `cd` before it, then each `-C` — and compares that worktree's `git write-tree`
-   with the approval recorded in that worktree's own git directory (`git rev-parse --git-path
-   devkit-review-state`: one per worktree, never tracked, nothing to ignore). A shell tool starts in
-   the `cwd` the hook is given; a terminal tab starts in the absolute or `~` path the call names,
-   and otherwise somewhere the hook is not told — a new tab's default, or a reused tab wherever its
-   earlier commands left it — so its commit needs a literal `-C`.
-3. No match → the commit is blocked with the exact command that records approval. Three shapes are
-   blocked outright: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`, `--git-dir`) cannot be
-   judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`, pathspecs) writes a tree
-   nobody reviewed; a commit that skips hooks (`--no-verify`, `core.hooksPath`) skips the gates the
-   approval assumes.
+   starts, then any `cd` before it, then each `-C` — and judges it **only when that directory is one
+   of the project's own worktrees** (matched against `git -C <project> worktree list`, the project
+   taken from `$CLAUDE_PROJECT_DIR` or the hook's `cwd`). Any other directory is left for the user,
+   with no git run there at all: a hook runs before Claude Code's permission check, so a commit that
+   merely *names* a foreign directory must not make the gate touch it — a `\\host\share` target would
+   make Windows authenticate to that host over SMB, and a foreign repository's `core.fsmonitor` would
+   execute on `write-tree`, both before the user could deny the command. The gate never touches a
+   `\\`, `//`, `\\?\` or `\\.\` path, and passes `-c core.fsmonitor=false` on every git call it makes.
+   For a worktree it does judge, it compares that worktree's `git write-tree` with the approval
+   recorded in its own git directory (`git rev-parse --git-path devkit-review-state`: one per
+   worktree, never tracked, nothing to ignore). A shell tool starts in the `cwd` the hook is given; a
+   terminal tab starts in the absolute or `~` path the call names, and otherwise somewhere the hook is
+   not told — a new tab's default, or a reused tab wherever its earlier commands left it — so its
+   commit needs a literal `-C`.
+3. No match → the commit is blocked with the command that records approval. Three shapes are blocked
+   outright when they target the project: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`,
+   `--git-dir`) cannot be judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`,
+   pathspecs) writes a tree nobody reviewed; a commit that skips hooks (`--no-verify`,
+   `core.hooksPath`) skips the gates the approval assumes.
 4. The agent reviews that worktree's staged diff against the project's rules and its own axes, and
-   runs `.claude/hooks/approve-review.mjs` **only** when nothing is blocking. A rule broken by a line
-   the diff adds blocks; one on an untouched line is reported as debt.
+   runs `.claude/hooks/approve-review.mjs` **only** when nothing is blocking, passing the tree id it
+   reviewed. A rule broken by a line the diff adds blocks; one on an untouched line is reported as
+   debt.
 
-Approval is bound to one worktree's exact staged tree, so staging more after a review does not slip
-through, and reviewing one worktree does not approve its sibling. The hook is registered in exec
-form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its argument — so
-Claude Code fills in the project root itself and starts node with no shell: the hook loads from the
-project whatever directory the command runs in, on Windows with or without Git Bash. Exec form needs
-Claude Code 2.1.139 or later; an older one does not run the gate as registered, and the call goes
-through. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
-payload misbehaves — a broken gate must never wedge a repo. It is a backstop for the agent's own
-commits, not a sandbox: it sees one command at a time, starting from the working directory the tool
-reports, so a commit hidden in `bash -c`, `eval`, a script, or a rebase is not one it sees.
+Approval is bound to the exact tree the reviewer read: it passes that tree id to
+`approve-review.mjs`, which recomputes `git write-tree` and refuses to record when it differs, so a
+fix staged while a background review runs cannot be approved unreviewed, and reviewing one worktree
+does not approve its sibling. The hook is split into one-role files under `.claude/hooks/` — a
+shell lexer, a path resolver, a commit reader, a hook-payload decoder, a git-state adapter, and the
+gate that judges — loaded by `require-review.mjs`; `approve-review.mjs` records approval. It is
+registered in exec form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its
+argument — so Claude Code fills in the project root itself and starts node with no shell: the hook
+loads from the project whatever directory the command runs in, on Windows with or without Git Bash.
+Exec form needs Claude Code 2.1.139 or later; an older one does not run the gate as registered, and
+the call goes through. It needs git 2.31 or later for `--path-format=absolute`. It fails open when
+git or the payload misbehaves — a broken gate must never wedge a repo — but writes the reason to
+stderr (visible in the hook's debug log) so a gate that is failing open is not failing silently. It
+is a backstop for the agent's own commits, not a sandbox: it sees one command at a time, starting
+from the working directory the tool reports, so a commit hidden in `bash -c`, `eval`, a script, or a
+rebase is not one it sees.
 
 ## Internals
 
@@ -208,11 +223,15 @@ in half the projects that want the strictness.
 ## Status
 
 `npm test` is the claim. It covers the review gate's command reader for both shells, the tools it
-reads and a registration that names exactly those, every refusal and targeting form, its git adapter
-against a real repository with a linked worktree, and its entrypoints against a real repository —
-the registered command included, started with no shell from outside the project; the commit-message
-patterns; the comment gate and its baseline, end to end; the `ignored-targets` decision; and the
-upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript` devDependency. The
+reads and a registration that names exactly those, every refusal and targeting form, that it leaves
+a directory outside the project's worktrees unjudged without running git there, that it refuses UNC
+and device paths, that every git call disables fsmonitor, and that it writes a reason to stderr when
+it fails open; its git adapter against a real repository with a linked worktree; approval bound to
+the reviewed tree and refused when that tree has since changed; and its entrypoints against a real
+repository — the registered command included, started with no shell from outside the project; the
+commit-message patterns; the comment gate and its baseline, end to end; the `ignored-targets`
+decision; and the upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript`
+devDependency. The
 Biome rule names are checked by hand against the pinned schema whenever the pin moves, since the
 suite carries no Biome; the commit-message hook is run through lefthook by hand whenever its command
 changes, since lefthook's Windows spawn breaks on a double quote that `sh` alone accepts.
