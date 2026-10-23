@@ -74,11 +74,12 @@ then re-run for the toolchain once the stack is real.
    the diff adds blocks; one on an untouched line is reported as debt.
 
 Approval is bound to one worktree's exact staged tree, so staging more after a review does not slip
-through, and reviewing one worktree does not approve its sibling. The hook is registered as
-`node "$CLAUDE_PROJECT_DIR/.claude/hooks/require-review.mjs"`, so it loads from the project whatever
-directory the command runs in. Claude Code runs command hooks through Git Bash on Windows; a Windows
-install without Git Bash runs them through PowerShell, where that path does not expand and the hook
-never fires. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
+through, and reviewing one worktree does not approve its sibling. The hook is registered in exec
+form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its argument — so
+Claude Code fills in the project root itself and starts node with no shell: the hook loads from the
+project whatever directory the command runs in, on Windows with or without Git Bash. Exec form needs
+Claude Code 2.1.139 or later; an older one does not run the gate as registered, and the call goes
+through. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
 payload misbehaves — a broken gate must never wedge a repo. It is a backstop for the agent's own
 commits, not a sandbox: it sees one command at a time, starting from the working directory the tool
 reports, so a commit hidden in `bash -c`, `eval`, a script, or a rebase is not one it sees.
@@ -208,11 +209,11 @@ in half the projects that want the strictness.
 
 `npm test` is the claim. It covers the review gate's command reader for both shells, the tools it
 reads and a registration that names exactly those, every refusal and targeting form, its git adapter
-against a real repository with a linked worktree, and its entrypoints against a real repository;
-the comment gate and its baseline, end to end; the `ignored-targets` decision; and the upgrade of
-devkit-owned hook entries. It needs Node, git, and the `typescript` devDependency. The Biome rule
-names are checked by hand against the pinned schema whenever the pin moves, since the suite carries
-no Biome.
+against a real repository with a linked worktree, and its entrypoints against a real repository —
+the registered command included, started with no shell from outside the project; the comment gate
+and its baseline, end to end; the `ignored-targets` decision; and the upgrade of devkit-owned hook
+entries. It needs Node, git, and the `typescript` devDependency. The Biome rule names are checked by
+hand against the pinned schema whenever the pin moves, since the suite carries no Biome.
 
 Verified once by hand against a real project: install → `pnpm install` → `tsc` inherits the strict
 base with local overrides intact → `biome` resolves the shared config; detection across

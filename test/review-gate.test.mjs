@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
+  copyFileSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -23,6 +25,7 @@ const MODULE = fileURLToPath(new URL('../modules/review/', import.meta.url));
 const TEMPLATES = join(MODULE, 'templates');
 const HOOK = join(TEMPLATES, 'require-review.mjs');
 const APPROVE = join(TEMPLATES, 'approve-review.mjs');
+const manifest = JSON.parse(readFileSync(join(MODULE, 'module.json'), 'utf8'));
 const [registration] = JSON.parse(readFileSync(join(TEMPLATES, 'settings.json'), 'utf8')).hooks
   .PreToolUse;
 
@@ -566,4 +569,26 @@ test('the hook entrypoint fails open on what it cannot read, blocks an unreviewe
   stage(dir, 'b.txt');
   assert.equal(hook(bash('git commit -m x', dir)).status, 2);
   assert.equal(hook(viaPowerShell).status, 2);
+});
+
+test('the registered hook loads from the project root with no shell, whatever directory it starts in', () => {
+  const project = repository('registered');
+  for (const file of manifest.files.filter((entry) => entry.to.startsWith('.claude/hooks/'))) {
+    mkdirSync(dirname(join(project, file.to)), { recursive: true });
+    copyFileSync(join(MODULE, file.from), join(project, file.to));
+  }
+  stage(project, 'a.txt');
+  const [entry] = registration.hooks;
+  const args = entry.args.map((arg) => arg.replaceAll('${CLAUDE_PROJECT_DIR}', project));
+  const registered = (payload) =>
+    spawnSync(entry.command, args, { cwd: sandbox, input: JSON.stringify(payload), encoding: 'utf8' });
+
+  const monitored = registered(commitIn('Monitor', project));
+  assert.equal(monitored.status, 2, monitored.stderr);
+  assert.match(monitored.stderr, /has not been reviewed/);
+  const terminal = registered(commitIn('mcp__terminal__run_in_terminal', sandbox, { cwd: project }));
+  assert.equal(terminal.status, 2, terminal.stderr);
+
+  spawnSync(process.execPath, [join(project, '.claude/hooks/approve-review.mjs'), project]);
+  assert.equal(registered(commitIn('Monitor', project)).status, 0);
 });

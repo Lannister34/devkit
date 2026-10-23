@@ -203,7 +203,8 @@ run them if the user agrees:
 - Install dependencies, if `ts` was installed — its dev dependencies were merged into `package.json`.
 - `lefthook install` — nothing in `lefthook.yml` runs until this happens.
 - Restart the session if `review` was installed or upgraded, so the hook in `.claude/settings.json`
-  loads.
+  loads. Check `claude --version` against the minimum devkit's README names under "The review gate":
+  below it, the gate never runs.
 - On an upgrade of `review`, recommend `override` for every file the module owns under `.claude/`,
   and say why: the hook scripts and the agent are one mechanism, and `keep` on any one of them
   leaves a gate that can never open.
