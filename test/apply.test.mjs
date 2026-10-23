@@ -15,6 +15,8 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const APPLY = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'apply.mjs');
+const REVIEW_SETTINGS = join(dirname(APPLY), '..', 'modules', 'review', 'templates', 'settings.json');
+const [shippedGate] = JSON.parse(readFileSync(REVIEW_SETTINGS, 'utf8')).hooks.PreToolUse;
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'devkit-apply-')));
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 writeFileSync(join(sandbox, 'gitconfig'), '');
@@ -164,8 +166,7 @@ test('an upgrade replaces the earlier gate hook entry and keeps the project own 
   const hooks = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8')).hooks
     .PreToolUse;
   const gates = hooks.filter((entry) => JSON.stringify(entry).includes('require-review.mjs'));
-  assert.equal(gates.length, 1);
-  assert.equal(gates[0].matcher, 'Bash|PowerShell');
+  assert.deepEqual(gates, [shippedGate]);
   assert.deepEqual(hooks[0], theirs);
 
   const again = plan(root).summary;
@@ -206,7 +207,7 @@ test('an upgrade prunes a mixed matcher group instead of dropping the project ho
     .PreToolUse;
   assert.equal(hooks.length, 2);
   assert.deepEqual(hooks[0], { matcher: 'Bash', hooks: [lint] });
-  assert.equal(hooks[1].matcher, 'Bash|PowerShell');
+  assert.deepEqual(hooks[1], shippedGate);
 
   const again = plan(root).summary;
   assert.ok(again.unchanged.some((entry) => entry.path === '.claude/settings.json'));

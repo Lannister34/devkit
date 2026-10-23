@@ -4,4 +4,4 @@ commit-msg:
     conventional:
       # Sole gate: grep's exit code. Subshells and quoted echo break under lefthook's Windows spawn.
       run: >-
-        head -1 {1} | grep -Eq '{{commitPattern}}'
+        head -1 {1} | grep -Eq -e '{{commitPattern}}' -e '^Merge ' -e '^(Revert|Reapply) [^A-Za-z0-9 ]'

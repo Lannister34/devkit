@@ -32,7 +32,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 |---|---|---|
 | `core` | always | gates, comment whitelist, module-seam and surface rules, edge and failure-path rules, test rules |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
-| `git` | `.git` | line-ending normalisation, conventional-commit message hook |
+| `git` | `.git` | line-ending normalisation, conventional-commit message hook that also passes git's merge and revert subjects |
 | `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate bound to each worktree's staged tree |
 
 `git` and `review` are gated on the target being a repository root, so a folder that merely *contains*
@@ -52,13 +52,18 @@ then re-run for the toolchain once the stack is real.
 
 `review` is the answer to "I want to coordinate, not validate every step":
 
-1. A `PreToolUse` hook reads every command the `Bash` and `PowerShell` tools are about to run the way
-   that shell would: quoted text and heredoc or here-string bodies are data, so a message or a note
-   that mentions `git commit` is not one.
-2. For each `git commit` it finds, it resolves the worktree the commit targets — the tool's `cwd`,
-   then any `cd` before it, then each `-C` — and compares that worktree's `git write-tree` with the
-   approval recorded in that worktree's own git directory (`git rev-parse --git-path
-   devkit-review-state`: one per worktree, never tracked, nothing to ignore).
+1. A `PreToolUse` hook reads every command a shell-running tool is about to run the way that shell
+   would: `Bash` and `Monitor` through bash, `PowerShell` through PowerShell, and the desktop app's
+   terminal (`mcp__terminal__run_in_terminal`) through PowerShell on Windows and through bash
+   elsewhere, where fish's `and`, `or` and `not` count as prefixes. Quoted text and heredoc or
+   here-string bodies are data, so a message or a note that mentions `git commit` is not one.
+2. For each `git commit` it finds, it resolves the worktree the commit targets — where the command
+   starts, then any `cd` before it, then each `-C` — and compares that worktree's `git write-tree`
+   with the approval recorded in that worktree's own git directory (`git rev-parse --git-path
+   devkit-review-state`: one per worktree, never tracked, nothing to ignore). A shell tool starts in
+   the `cwd` the hook is given; a terminal tab starts in the absolute or `~` path the call names,
+   and otherwise somewhere the hook is not told — a new tab's default, or a reused tab wherever its
+   earlier commands left it — so its commit needs a literal `-C`.
 3. No match → the commit is blocked with the exact command that records approval. Three shapes are
    blocked outright: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`, `--git-dir`) cannot be
    judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`, pathspecs) writes a tree
@@ -69,11 +74,12 @@ then re-run for the toolchain once the stack is real.
    the diff adds blocks; one on an untouched line is reported as debt.
 
 Approval is bound to one worktree's exact staged tree, so staging more after a review does not slip
-through, and reviewing one worktree does not approve its sibling. The hook is registered as
-`node "$CLAUDE_PROJECT_DIR/.claude/hooks/require-review.mjs"`, so it loads from the project whatever
-directory the command runs in. Claude Code runs command hooks through Git Bash on Windows; a Windows
-install without Git Bash runs them through PowerShell, where that path does not expand and the hook
-never fires. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
+through, and reviewing one worktree does not approve its sibling. The hook is registered in exec
+form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its argument — so
+Claude Code fills in the project root itself and starts node with no shell: the hook loads from the
+project whatever directory the command runs in, on Windows with or without Git Bash. Exec form needs
+Claude Code 2.1.139 or later; an older one does not run the gate as registered, and the call goes
+through. It needs git 2.31 or later for `--path-format=absolute`. It fails open when git or the
 payload misbehaves — a broken gate must never wedge a repo. It is a backstop for the agent's own
 commits, not a sandbox: it sees one command at a time, starting from the working directory the tool
 reports, so a commit hidden in `bash -c`, `eval`, a script, or a rebase is not one it sees.
@@ -201,12 +207,15 @@ in half the projects that want the strictness.
 
 ## Status
 
-`npm test` is the claim. It covers the review gate's command reader for both shells, every refusal
-and targeting form, its git adapter against a real repository with a linked worktree, and its
-entrypoints against a real repository; the comment gate and its baseline, end to end; the
-`ignored-targets` decision; and the upgrade of devkit-owned hook entries. It needs Node, git, and the
-`typescript` devDependency. The Biome rule names are checked by hand against the pinned schema
-whenever the pin moves, since the suite carries no Biome.
+`npm test` is the claim. It covers the review gate's command reader for both shells, the tools it
+reads and a registration that names exactly those, every refusal and targeting form, its git adapter
+against a real repository with a linked worktree, and its entrypoints against a real repository —
+the registered command included, started with no shell from outside the project; the commit-message
+patterns; the comment gate and its baseline, end to end; the `ignored-targets` decision; and the
+upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript` devDependency. The
+Biome rule names are checked by hand against the pinned schema whenever the pin moves, since the
+suite carries no Biome; the commit-message hook is run through lefthook by hand whenever its command
+changes, since lefthook's Windows spawn breaks on a double quote that `sh` alone accepts.
 
 Verified once by hand against a real project: install → `pnpm install` → `tsc` inherits the strict
 base with local overrides intact → `biome` resolves the shared config; detection across
