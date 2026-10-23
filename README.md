@@ -32,7 +32,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 |---|---|---|
 | `core` | always | gates, comment whitelist, module-seam and surface rules, edge and failure-path rules, test rules |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
-| `git` | `.git` | line-ending normalisation, conventional-commit message hook |
+| `git` | `.git` | line-ending normalisation, conventional-commit message hook that also passes git's merge and revert subjects |
 | `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate bound to each worktree's staged tree |
 
 `git` and `review` are gated on the target being a repository root, so a folder that merely *contains*
@@ -210,10 +210,12 @@ in half the projects that want the strictness.
 `npm test` is the claim. It covers the review gate's command reader for both shells, the tools it
 reads and a registration that names exactly those, every refusal and targeting form, its git adapter
 against a real repository with a linked worktree, and its entrypoints against a real repository —
-the registered command included, started with no shell from outside the project; the comment gate
-and its baseline, end to end; the `ignored-targets` decision; and the upgrade of devkit-owned hook
-entries. It needs Node, git, and the `typescript` devDependency. The Biome rule names are checked by
-hand against the pinned schema whenever the pin moves, since the suite carries no Biome.
+the registered command included, started with no shell from outside the project; the commit-message
+patterns; the comment gate and its baseline, end to end; the `ignored-targets` decision; and the
+upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript` devDependency. The
+Biome rule names are checked by hand against the pinned schema whenever the pin moves, since the
+suite carries no Biome; the commit-message hook is run through lefthook by hand whenever its command
+changes, since lefthook's Windows spawn breaks on a double quote that `sh` alone accepts.
 
 Verified once by hand against a real project: install → `pnpm install` → `tsc` inherits the strict
 base with local overrides intact → `biome` resolves the shared config; detection across
