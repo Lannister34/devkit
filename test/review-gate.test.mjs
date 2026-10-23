@@ -1,15 +1,30 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { findCommits, gitRepo, judge } from '../modules/review/templates/review-gate.mjs';
+import {
+  findCommits,
+  gitRepo,
+  judge,
+  SHELL_BY_TOOL,
+  toolCommand,
+} from '../modules/review/templates/review-gate.mjs';
 
-const TEMPLATES = fileURLToPath(new URL('../modules/review/templates/', import.meta.url));
+const MODULE = fileURLToPath(new URL('../modules/review/', import.meta.url));
+const TEMPLATES = join(MODULE, 'templates');
 const HOOK = join(TEMPLATES, 'require-review.mjs');
 const APPROVE = join(TEMPLATES, 'approve-review.mjs');
+const [registration] = JSON.parse(readFileSync(join(TEMPLATES, 'settings.json'), 'utf8')).hooks
+  .PreToolUse;
 
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'devkit-gate-')));
 after(() => rmSync(sandbox, { recursive: true, force: true }));
@@ -349,11 +364,108 @@ git -C D:\\wt commit -m y`,
   ['env -u drops one variable, not the commit', 'env -u PAGER git commit -m x', posix, [{ dir: '/repo' }]],
   ['env by its path', '/usr/bin/env git commit -m x', posix, [{ dir: '/repo' }]],
   ['arithmetic is not a heredoc', '(( a <<= 2 ))\ngit commit -m x', posix, [{ dir: '/repo' }]],
+  [
+    'fish chains with and, or, not',
+    'cd /wt; and git commit -m x; or not git -C /b commit -m y',
+    posix,
+    [{ dir: '/wt' }, { dir: '/b' }],
+  ],
 ];
 
 for (const [name, command, context, expected] of readerCases) {
   test(`reads: ${name}`, () => assert.deepEqual(findCommits(command, context), expected));
 }
+
+const linuxHost = { cwd: '/hook', platform: 'linux', home: '/home/me' };
+const windowsHost = { cwd: String.raw`D:\hook`, platform: 'win32', home: String.raw`C:\Users\me` };
+const commitIn = (tool_name, cwd, extra = {}) => ({
+  tool_name,
+  tool_input: { command: 'git commit -m x', ...extra },
+  cwd,
+});
+
+const toolCases = [
+  ['Bash in the cwd it reports', commitIn('Bash', '/repo'), linuxHost, { shell: 'bash', cwd: '/repo' }],
+  [
+    'PowerShell in the cwd it reports',
+    commitIn('PowerShell', String.raw`D:\Neuro\app`),
+    windowsHost,
+    { shell: 'powershell', cwd: String.raw`D:\Neuro\app` },
+  ],
+  [
+    'Monitor runs its command through bash, on Windows too',
+    commitIn('Monitor', String.raw`D:\Neuro\app`),
+    windowsHost,
+    { shell: 'bash', cwd: String.raw`D:\Neuro\app` },
+  ],
+  [
+    'the desktop terminal runs PowerShell on Windows, in the directory it names',
+    commitIn('mcp__terminal__run_in_terminal', String.raw`D:\Neuro\app`, { cwd: String.raw`D:\wt` }),
+    windowsHost,
+    { shell: 'powershell', cwd: String.raw`D:\wt` },
+  ],
+  [
+    'the desktop terminal runs the login shell elsewhere, read as bash',
+    commitIn('mcp__terminal__run_in_terminal', '/repo', { cwd: '~/wt' }),
+    linuxHost,
+    { shell: 'bash', cwd: '/home/me/wt' },
+  ],
+  [
+    'a new terminal tab with no cwd opens in a directory the hook is not told',
+    commitIn('mcp__terminal__run_in_terminal', '/repo'),
+    linuxHost,
+    { shell: 'bash', cwd: null },
+  ],
+  [
+    'a relative terminal cwd hangs off that same untold directory',
+    commitIn('mcp__terminal__run_in_terminal', '/repo', { cwd: '../wt' }),
+    linuxHost,
+    { shell: 'bash', cwd: null },
+  ],
+  [
+    'a reused terminal tab is wherever earlier commands left it',
+    commitIn('mcp__terminal__run_in_terminal', '/repo', { tab_id: '2' }),
+    linuxHost,
+    { shell: 'bash', cwd: null },
+  ],
+  [
+    'a payload without a cwd starts where the hook runs',
+    { tool_name: 'Bash', tool_input: { command: 'git commit -m x' } },
+    linuxHost,
+    { shell: 'bash', cwd: '/hook' },
+  ],
+];
+
+for (const [name, payload, host, expected] of toolCases) {
+  test(`tool: ${name}`, () => {
+    const { command, context } = toolCommand(payload, host);
+    assert.equal(command, payload.tool_input.command);
+    assert.deepEqual({ shell: context.shell, cwd: context.cwd }, expected);
+  });
+}
+
+test('tool: a terminal commit from a directory the hook is not told is refused unless it names one', () => {
+  const read = (extra) => {
+    const { command, context } = toolCommand(
+      commitIn('mcp__terminal__run_in_terminal', '/repo', extra),
+      linuxHost,
+    );
+    return findCommits(command, context);
+  };
+  assert.deepEqual(read({ tab_id: '2' }), [unfollowable]);
+  assert.deepEqual(read({ tab_id: '2', command: 'git -C /wt commit -m x' }), [{ dir: '/wt' }]);
+});
+
+test('tool: calls that carry no shell command are not read', () => {
+  assert.equal(toolCommand({ tool_name: 'Read', tool_input: { file_path: 'x' } }, linuxHost), null);
+  assert.equal(toolCommand({ tool_name: 'Monitor', tool_input: { ws: { url: 'wss://x' } } }, linuxHost), null);
+  assert.equal(toolCommand({ tool_name: 'Bash', tool_input: { command: ['git'] } }, linuxHost), null);
+  assert.equal(toolCommand(null, linuxHost), null);
+});
+
+test('the hook registration matches exactly the tools the gate reads', () => {
+  assert.deepEqual(registration.matcher.split('|').sort(), [...SHELL_BY_TOOL.keys()].sort());
+});
 
 test('judge passes an approved tree, blocks an unapproved one, and fails open on git errors', () => {
   const trees = {
