@@ -85,8 +85,13 @@ test('ignored install targets raise a decision that names each file and the patt
   assert.deepEqual(decision.detail.ignored.map((entry) => entry.path).sort(), [
     '.claude/agents/code-review.md',
     '.claude/hooks/approve-review.mjs',
+    '.claude/hooks/commit-reader.mjs',
+    '.claude/hooks/git-state.mjs',
+    '.claude/hooks/hook-payload.mjs',
+    '.claude/hooks/path-resolver.mjs',
     '.claude/hooks/require-review.mjs',
     '.claude/hooks/review-gate.mjs',
+    '.claude/hooks/shell-lexer.mjs',
     '.claude/settings.json',
     '.claude/toolkit.json',
     'CLAUDE.md',
