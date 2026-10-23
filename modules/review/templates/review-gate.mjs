@@ -1,21 +1,3 @@
-import path from 'node:path';
-
-function pathsFor(platform) {
-  return platform === 'win32' ? path.win32 : path.posix;
-}
-
-function normalize(dir, platform) {
-  const resolved = pathsFor(platform).resolve(dir);
-  return platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
-
-function withinRoots(dir, roots, platform) {
-  if (typeof dir !== 'string' || dir.length === 0) return false;
-  const sep = pathsFor(platform).sep;
-  const candidate = normalize(dir, platform);
-  return roots.some((root) => candidate === root || candidate.startsWith(root + sep));
-}
-
 const unresolvedRefusal = (commit) =>
   `Cannot tell which worktree this commit targets (${commit.unresolved}). ` +
   'Retry it as `git -C <literal path> commit`.';
@@ -28,10 +10,10 @@ const skipsHooksRefusal = () =>
   'This commit skips the git hooks, which run the gates the review approval assumes. ' +
   'Fix what the hooks report instead.';
 
-function unreviewedRefusal(commit, trees, approveScript) {
+function unreviewedRefusal(worktree, trees, approveScript) {
   return (
     "This commit's staged tree has not been reviewed.\n\n" +
-    `  worktree:  ${commit.dir}\n` +
+    `  worktree:  ${worktree}\n` +
     `  tree:      ${trees.staged}\n` +
     `  approved:  ${trees.approved || '(none)'}\n\n` +
     'Run the code-review agent on that worktree, fix every blocking finding, then let it record ' +
@@ -41,11 +23,10 @@ function unreviewedRefusal(commit, trees, approveScript) {
   );
 }
 
-const failedOpen = (dir, reason) =>
-  `could not check the staged tree in ${dir}, so the commit was let through: ${reason}`;
+const failedOpen = (worktree, reason) =>
+  `could not check the staged tree in ${worktree}, so the commit was let through: ${reason}`;
 
-export function judge(commits, repo, { approveScript, worktrees = [], platform }) {
-  const roots = worktrees.map((root) => normalize(root, platform));
+export function judge(commits, repo, { approveScript, scope }) {
   const blocks = [];
   const notes = [];
   for (const commit of commits) {
@@ -53,7 +34,8 @@ export function judge(commits, repo, { approveScript, worktrees = [], platform }
       blocks.push(unresolvedRefusal(commit));
       continue;
     }
-    if (!withinRoots(commit.dir, roots, platform)) continue;
+    const worktree = scope(commit.dir);
+    if (worktree === null) continue;
     if (commit.stages) {
       blocks.push(stagesRefusal(commit));
       continue;
@@ -64,17 +46,17 @@ export function judge(commits, repo, { approveScript, worktrees = [], platform }
     }
     let trees;
     try {
-      trees = repo.trees(commit.dir);
+      trees = repo.trees(worktree);
     } catch (error) {
-      notes.push(failedOpen(commit.dir, error instanceof Error ? error.message : String(error)));
+      notes.push(failedOpen(worktree, error instanceof Error ? error.message : String(error)));
       continue;
     }
     if (trees === null) {
-      notes.push(failedOpen(commit.dir, 'git reported no staged tree'));
+      notes.push(failedOpen(worktree, 'git reported no staged tree'));
       continue;
     }
     if (trees.staged === trees.approved) continue;
-    blocks.push(unreviewedRefusal(commit, trees, approveScript));
+    blocks.push(unreviewedRefusal(worktree, trees, approveScript));
   }
   return { blocks, notes };
 }
