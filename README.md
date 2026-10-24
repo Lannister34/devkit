@@ -203,8 +203,8 @@ dependencies:
 
 ```json
 "@devkit/tsconfig": "github:Lannister34/devkit#v0.1.2&path:/packages/tsconfig",
-"@devkit/biome-config": "github:Lannister34/devkit#v0.2.0&path:/packages/biome-config",
-"@devkit/checks": "github:Lannister34/devkit#v0.2.0&path:/packages/checks"
+"@devkit/biome-config": "github:Lannister34/devkit#v0.1.11&path:/packages/biome-config",
+"@devkit/checks": "github:Lannister34/devkit#v0.1.11&path:/packages/checks"
 ```
 
 `@devkit/checks` carries the gates Biome has no rule for. `devkit-comments` reads every tracked
