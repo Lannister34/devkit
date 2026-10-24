@@ -609,6 +609,22 @@ test('resolveProjectWorktree matches a worktree and rejects nested repos and sym
   assert.equal(resolveProjectWorktree('/repo/link/x', roots, 'linux', linkInPath), null);
 });
 
+test('resolveProjectWorktree never looks through a symlink before it has checked it', () => {
+  const recording = (dirs) => {
+    const fs = probeFs(dirs);
+    const calls = [];
+    return { calls, lstat: (target) => (calls.push(target), fs.lstat(target)) };
+  };
+
+  const posix = recording(new Map([['/repo/link', 'symlink'], ['/repo/link/x', 'dir'], ['/repo/link/x/y', 'dir']]));
+  assert.equal(resolveProjectWorktree('/repo/link/x/y', ['/repo'], 'linux', posix), null);
+  assert.deepEqual(posix.calls, ['/repo/link']);
+
+  const windows = recording(new Map([['D:\\Repo\\link', 'symlink'], ['D:\\Repo\\link\\x', 'dir']]));
+  assert.equal(resolveProjectWorktree('d:\\repo\\link\\x', ['D:/Repo'], 'win32', windows), null);
+  assert.deepEqual(windows.calls, ['D:\\Repo\\link']);
+});
+
 const git = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
 
 function repository(name) {
