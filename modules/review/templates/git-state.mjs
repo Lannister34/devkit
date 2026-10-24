@@ -1,12 +1,18 @@
+import { devNull } from 'node:os';
+
 const STATE_NAME = 'devkit-review-state';
 
 export function gitRepo({ exec, read, write }) {
   const git = (dir, args) =>
-    exec('git', ['-c', 'core.fsmonitor=false', '-C', dir, ...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 10_000,
-    }).trim();
+    exec(
+      'git',
+      ['-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${devNull}`, '-C', dir, ...args],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 10_000,
+      },
+    ).trim();
   const statePath = (dir) =>
     git(dir, ['rev-parse', '--path-format=absolute', '--git-path', STATE_NAME]);
   const approved = (state) => {

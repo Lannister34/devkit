@@ -92,6 +92,7 @@ test('ignored install targets raise a decision that names each file and the patt
     '.claude/hooks/require-review.mjs',
     '.claude/hooks/review-gate.mjs',
     '.claude/hooks/shell-lexer.mjs',
+    '.claude/hooks/worktree-scope.mjs',
     '.claude/settings.json',
     '.claude/toolkit.json',
     'CLAUDE.md',
