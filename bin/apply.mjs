@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const DEVKIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MODULES_DIR = join(DEVKIT_ROOT, 'modules');
@@ -638,7 +639,7 @@ function planFile(target, overlay, module, entry, vars, resolutions) {
     if (conflicts.length > 0) {
       return { module: module.name, path: to, action: 'conflict', reason: conflicts.map((c) => `${c.path}: has ${JSON.stringify(c.existing)}, wants ${JSON.stringify(c.incoming)}`).join('; ') };
     }
-    const action = { module: module.name, path: to, action: content === existing ? 'unchanged' : 'merge', content };
+    const action = { module: module.name, path: to, action: isDeepStrictEqual(merged, JSON.parse(existing)) ? 'unchanged' : 'merge', content };
     if (replaced.length === 0) return action;
     const paths = [...new Set(replaced.map((entry) => entry.path))].join(', ');
     return { ...action, reason: `replaces ${replaced.length} earlier devkit entry(ies) in ${paths}`, detail: { replaced } };
@@ -665,7 +666,7 @@ function planDependencies(target, overlay, module) {
     return [{ module: module.name, path: 'package.json', action: 'conflict', reason: conflicts.map((c) => `${c.path}: has ${JSON.stringify(c.existing)}, wants ${JSON.stringify(c.incoming)}`).join('; ') }];
   }
   const content = `${JSON.stringify(merged, null, 2)}\n`;
-  return [{ module: module.name, path: 'package.json', action: content === raw ? 'unchanged' : 'merge', content }];
+  return [{ module: module.name, path: 'package.json', action: isDeepStrictEqual(merged, JSON.parse(raw)) ? 'unchanged' : 'merge', content }];
 }
 
 function write(target, action) {
