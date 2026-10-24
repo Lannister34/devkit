@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   copyFileSync,
+  existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -9,7 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { devNull, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +20,7 @@ import { gitRepo } from '../modules/review/templates/git-state.mjs';
 import { SHELL_BY_TOOL, toolCommand } from '../modules/review/templates/hook-payload.mjs';
 import { isUncOrDevice, pathResolver } from '../modules/review/templates/path-resolver.mjs';
 import { judge } from '../modules/review/templates/review-gate.mjs';
+import { resolveProjectWorktree } from '../modules/review/templates/worktree-scope.mjs';
 
 const MODULE = fileURLToPath(new URL('../modules/review/', import.meta.url));
 const TEMPLATES = join(MODULE, 'templates');
@@ -471,7 +474,8 @@ test('the hook registration matches exactly the tools the gate reads', () => {
   assert.deepEqual(registration.matcher.split('|').sort(), [...SHELL_BY_TOOL.keys()].sort());
 });
 
-const judgeOpts = (worktrees) => ({ approveScript: 'approve.mjs', worktrees, platform: 'linux' });
+const scopeOf = (allowed) => (dir) => (allowed.includes(dir) ? dir : null);
+const judgeOpts = (allowed) => ({ approveScript: 'approve.mjs', scope: scopeOf(allowed) });
 
 test('judge passes an approved tree, blocks an unapproved one, and notes a git failure without blocking', () => {
   const trees = {
@@ -535,10 +539,20 @@ test('the path resolver refuses UNC and device paths so git never touches them',
   const resolve = pathResolver({ platform: 'win32', shell: 'powershell', home: String.raw`C:\Users\me` });
   assert.equal(resolve(String.raw`D:\repo`, String.raw`\\host\share`), null);
   assert.equal(resolve(String.raw`D:\repo`, '//host/share'), null);
+  assert.equal(resolve(String.raw`D:\repo`, String.raw`\\server`), null);
+  assert.equal(resolve(String.raw`D:\repo`, String.raw`Microsoft.PowerShell.Core\FileSystem::\\evil\share`), null);
   assert.equal(resolve(String.raw`D:\repo`, String.raw`wt`), String.raw`D:\repo\wt`);
 });
 
-test('every git call the gate makes disables fsmonitor', () => {
+test('a UNC cwd on a non-terminal tool falls back to the hook directory instead of steering git', () => {
+  const host = { cwd: String.raw`D:\Neuro\app`, platform: 'win32', home: String.raw`C:\Users\me` };
+  const unc = toolCommand({ tool_name: 'Bash', tool_input: { command: 'git commit -m x' }, cwd: String.raw`\\evil\share` }, host);
+  assert.equal(unc.context.cwd, host.cwd);
+  const normal = toolCommand({ tool_name: 'Bash', tool_input: { command: 'git commit -m x' }, cwd: String.raw`D:\Neuro\wt` }, host);
+  assert.equal(normal.context.cwd, String.raw`D:\Neuro\wt`);
+});
+
+test('every git call the gate makes disables fsmonitor and hooks', () => {
   const calls = [];
   const exec = (_cmd, args) => {
     calls.push(args);
@@ -558,12 +572,41 @@ test('every git call the gate makes disables fsmonitor', () => {
   repo.approve('/repo', 'abc');
   assert.ok(calls.length >= 3);
   for (const args of calls) {
-    const at = args.indexOf('-c');
+    const config = args.filter((arg, i) => args[i - 1] === '-c');
+    assert.ok(config.includes('core.fsmonitor=false'), `fsmonitor on in: git ${args.join(' ')}`);
     assert.ok(
-      at !== -1 && args[at + 1] === 'core.fsmonitor=false',
-      `fsmonitor not disabled in: git ${args.join(' ')}`,
+      config.includes(`core.hooksPath=${devNull}`),
+      `hooks not disabled in: git ${args.join(' ')}`,
     );
   }
+});
+
+const probeFs = (dirs) => ({
+  lstat(target) {
+    if (dirs.has(target)) return { isSymbolicLink: () => dirs.get(target) === 'symlink' };
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  },
+});
+
+test('resolveProjectWorktree matches a worktree and rejects nested repos and symlinks without git', () => {
+  const roots = ['/repo', '/repo/linked'];
+  const plain = probeFs(new Map([['/repo/src', 'dir'], ['/repo/linked/x', 'dir']]));
+  assert.equal(resolveProjectWorktree('/repo', roots, 'linux', plain), '/repo');
+  assert.equal(resolveProjectWorktree('/repo/src', roots, 'linux', plain), '/repo');
+  assert.equal(resolveProjectWorktree('/repo/linked/x', roots, 'linux', plain), '/repo/linked');
+  assert.equal(resolveProjectWorktree('/elsewhere', roots, 'linux', plain), null);
+  assert.equal(resolveProjectWorktree('/repo-sibling', roots, 'linux', plain), null);
+
+  const nested = probeFs(new Map([['/repo/inner', 'dir'], ['/repo/inner/.git', 'file']]));
+  assert.equal(resolveProjectWorktree('/repo/inner', roots, 'linux', nested), null);
+
+  const underNested = probeFs(
+    new Map([['/repo/inner', 'dir'], ['/repo/inner/.git', 'dir'], ['/repo/inner/deep', 'dir']]),
+  );
+  assert.equal(resolveProjectWorktree('/repo/inner/deep', roots, 'linux', underNested), null);
+
+  const linkInPath = probeFs(new Map([['/repo/link/x', 'dir'], ['/repo/link', 'symlink']]));
+  assert.equal(resolveProjectWorktree('/repo/link/x', roots, 'linux', linkInPath), null);
 });
 
 const git = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
@@ -614,6 +657,20 @@ const hook = (payload, projectDir) =>
 const bash = (command, cwd) => ({ tool_name: 'Bash', tool_input: { command }, cwd });
 const approveRun = (...args) => spawnSync(process.execPath, [APPROVE, ...args], { encoding: 'utf8' });
 
+function nestedRepo(parent, relative) {
+  const dir = join(parent, relative);
+  mkdirSync(dir, { recursive: true });
+  execFileSync('git', ['init', '-q', dir]);
+  git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'i');
+  return dir;
+}
+
+function markerHook(dir, marker) {
+  const hooks = join(dir, '.git', 'hooks');
+  mkdirSync(hooks, { recursive: true });
+  writeFileSync(join(hooks, 'post-index-change'), `#!/bin/sh\necho ran > "${marker.replaceAll('\\', '/')}"\n`);
+}
+
 test('the hook entrypoint fails open on what it cannot read, blocks an unreviewed tree, and honours the approval entrypoint', () => {
   const dir = repository('hooked');
   stage(dir, 'a.txt');
@@ -652,6 +709,36 @@ test('a commit whose directory is outside the project worktrees is left for the 
   const other = repository('scoped-other');
   stage(other, 'a.txt');
   assert.equal(hook(bash(`git -C "${other}" commit -m x`, project), project).status, 0);
+});
+
+test('a commit in a nested repository under the project is foreign, so the gate runs no git there', () => {
+  const project = repository('outer');
+  const inner = nestedRepo(project, join('vendor', 'inner'));
+  stage(inner, 'secret.txt');
+  const marker = join(sandbox, 'inner-hook-ran');
+  markerHook(inner, marker);
+  const res = hook(bash('git commit -m x', inner), project);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(existsSync(marker), false);
+});
+
+test('a .git file under the project is a nested repo, so its gitdir (even a UNC one) is never followed', () => {
+  const project = repository('with-gitfile');
+  const sub = join(project, 'linked-sub');
+  mkdirSync(sub, { recursive: true });
+  writeFileSync(join(sub, '.git'), 'gitdir: //nosuchhost.invalid/share/x\n');
+  const res = hook(bash('git commit -m x', sub), project);
+  assert.equal(res.status, 0, res.stderr);
+});
+
+test('the gate disables hooks even on the project worktree it does judge', () => {
+  const project = repository('hooked-project');
+  stage(project, 'a.txt');
+  const marker = join(sandbox, 'project-hook-ran');
+  markerHook(project, marker);
+  const res = hook(bash('git commit -m x', project), project);
+  assert.equal(res.status, 2, res.stderr);
+  assert.equal(existsSync(marker), false);
 });
 
 test('approve-review records the reviewed tree and refuses when the staged tree changed since', () => {

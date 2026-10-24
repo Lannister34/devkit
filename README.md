@@ -58,20 +58,27 @@ then re-run for the toolchain once the stack is real.
    elsewhere, where fish's `and`, `or` and `not` count as prefixes. Quoted text and heredoc or
    here-string bodies are data, so a message or a note that mentions `git commit` is not one.
 2. For each `git commit` it finds, it resolves the worktree the commit targets — where the command
-   starts, then any `cd` before it, then each `-C` — and judges it **only when that directory is one
-   of the project's own worktrees** (matched against `git -C <project> worktree list`, the project
-   taken from `$CLAUDE_PROJECT_DIR` or the hook's `cwd`). Any other directory is left for the user,
-   with no git run there at all: a hook runs before Claude Code's permission check, so a commit that
-   merely *names* a foreign directory must not make the gate touch it — a `\\host\share` target would
-   make Windows authenticate to that host over SMB, and a foreign repository's `core.fsmonitor` would
-   execute on `write-tree`, both before the user could deny the command. The gate never touches a
-   `\\`, `//`, `\\?\` or `\\.\` path, and passes `-c core.fsmonitor=false` on every git call it makes.
-   For a worktree it does judge, it compares that worktree's `git write-tree` with the approval
-   recorded in its own git directory (`git rev-parse --git-path devkit-review-state`: one per
-   worktree, never tracked, nothing to ignore). A shell tool starts in the `cwd` the hook is given; a
-   terminal tab starts in the absolute or `~` path the call names, and otherwise somewhere the hook is
-   not told — a new tab's default, or a reused tab wherever its earlier commands left it — so its
-   commit needs a literal `-C`.
+   starts, then any `cd` before it, then each `-C` — and judges it **only when that directory belongs
+   to one of the project's own worktrees** (matched against `git -C <project> worktree list`, the
+   project taken from `$CLAUDE_PROJECT_DIR` or the hook's `cwd`). Any other directory is left for the
+   user, with no git run there at all: a hook runs before Claude Code's permission check, so a commit
+   that merely *names* a directory the project does not own must not make the gate touch it — a
+   `\\host\share` target would make Windows authenticate to that host over SMB, and a foreign
+   repository's `core.fsmonitor` or a hook such as `post-index-change` (which `write-tree` fires when
+   it rewrites the index) would execute, all before the user could deny the command. So the gate never
+   touches a `\\`, `//`, `\\?\` or `\\.\` path (nor a bare `\\server` or a PowerShell provider path,
+   which resolve to local paths); and, before it runs any git, it walks the real directories from the
+   commit's target up to the matched worktree root with filesystem calls only (`lstat`, no git) and
+   leaves the commit for the user if any of them holds its own `.git` — a nested repository, including
+   a `.git` *file* whose `gitdir:` could point anywhere, `//host/share` included — or is a symlink or
+   junction. Every git call it then makes passes `-c core.fsmonitor=false` and `-c core.hooksPath`
+   pointed at the null device, and runs with `-C <the matched worktree root>`, never the commit's own
+   directory — so git discovery can never descend into a nested repository. For a worktree it does
+   judge, it compares that worktree's `git write-tree` with the approval recorded in its own git
+   directory (`git rev-parse --git-path devkit-review-state`: one per worktree, never tracked, nothing
+   to ignore). A shell tool starts in the `cwd` the hook is given; a terminal tab starts in the
+   absolute or `~` path the call names, and otherwise somewhere the hook is not told — a new tab's
+   default, or a reused tab wherever its earlier commands left it — so its commit needs a literal `-C`.
 3. No match → the commit is blocked with the command that records approval. Three shapes are blocked
    outright when they target the project: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`,
    `--git-dir`) cannot be judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`,
@@ -86,8 +93,9 @@ Approval is bound to the exact tree the reviewer read: it passes that tree id to
 `approve-review.mjs`, which recomputes `git write-tree` and refuses to record when it differs, so a
 fix staged while a background review runs cannot be approved unreviewed, and reviewing one worktree
 does not approve its sibling. The hook is split into one-role files under `.claude/hooks/` — a
-shell lexer, a path resolver, a commit reader, a hook-payload decoder, a git-state adapter, and the
-gate that judges — loaded by `require-review.mjs`; `approve-review.mjs` records approval. It is
+shell lexer, a path resolver, a commit reader, a hook-payload decoder, a worktree-scope resolver, a
+git-state adapter, and the gate that judges — loaded by `require-review.mjs`; `approve-review.mjs`
+records approval. It is
 registered in exec form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its
 argument — so Claude Code fills in the project root itself and starts node with no shell: the hook
 loads from the project whatever directory the command runs in, on Windows with or without Git Bash.
@@ -225,9 +233,11 @@ in half the projects that want the strictness.
 `npm test` is the claim. It covers the review gate's command reader for both shells, the tools it
 reads and a registration that names exactly those, every refusal and targeting form, that it leaves
 a directory outside the project's worktrees unjudged without running git there, that it refuses UNC
-and device paths, that every git call disables fsmonitor, and that it writes a reason to stderr when
-it fails open; its git adapter against a real repository with a linked worktree; approval bound to
-the reviewed tree and refused when that tree has since changed; and its entrypoints against a real
+and device paths, that it treats a nested repository under the project — a `.git` directory or a
+`.git` file, and a symlinked path component — as foreign with filesystem checks alone, that every
+git call disables fsmonitor and hooks, and that it writes a reason to stderr when it fails open; its
+git adapter against a real repository with a linked worktree; approval bound to the reviewed tree and
+refused when that tree has since changed; and its entrypoints against a real
 repository — the registered command included, started with no shell from outside the project; the
 commit-message patterns; the comment gate and its baseline, end to end; the `ignored-targets`
 decision; and the upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript`
