@@ -22,8 +22,10 @@ export function resolveProjectWorktree(dir, roots, platform, { lstat }) {
     }
   }
   if (best === null) return null;
-  let current = paths.resolve(dir);
-  while (normalize(current, platform) !== best.norm) {
+  let current = paths.resolve(best.original);
+  const below = paths.relative(current, paths.resolve(dir));
+  for (const part of below.split(sep).filter(Boolean)) {
+    current = paths.join(current, part);
     let entry;
     try {
       entry = lstat(current);
@@ -38,9 +40,6 @@ export function resolveProjectWorktree(dir, roots, platform, { lstat }) {
       nested = false;
     }
     if (nested) return null;
-    const parent = paths.dirname(current);
-    if (parent === current) return null;
-    current = parent;
   }
   return best.original;
 }
