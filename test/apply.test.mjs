@@ -49,7 +49,7 @@ function planWith(applier, modules, root, ...extra) {
 
 const plan = (root, ...extra) => planWith(APPLY, 'core,review', root, ...extra);
 
-function devkitShipping(template) {
+function devkitShipping(template, dependencies) {
   const root = join(sandbox, 'devkit-copy');
   mkdirSync(join(root, 'bin'), { recursive: true });
   mkdirSync(join(root, 'modules', 'hooks', 'templates'), { recursive: true });
@@ -68,6 +68,7 @@ function devkitShipping(template) {
         ownedArrays: { 'hooks.PreToolUse': 'gate.mjs' },
       },
     ],
+    ...(dependencies ? { dependencies } : {}),
   };
   writeFileSync(join(root, 'modules', 'hooks', 'module.json'), `${JSON.stringify(manifest)}\n`);
   writeFileSync(join(root, 'modules', 'hooks', 'templates', 'settings.json'), `${JSON.stringify(template)}\n`);
@@ -217,4 +218,25 @@ test('an upgrade prunes a mixed matcher group instead of dropping the project ho
 
   const again = plan(root).summary;
   assert.ok(again.unchanged.some((entry) => entry.path === '.claude/settings.json'));
+});
+
+test('merged JSON that differs only in formatting is unchanged and is not rewritten', () => {
+  const gate = { type: 'command', command: 'node .claude/hooks/gate.mjs' };
+  const applier = devkitShipping(
+    { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [gate] }] } },
+    { devDependencies: { lefthook: '^1.10.0' }, scripts: { prepare: 'lefthook install' } },
+  );
+  const settings =
+    '{\n  "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "node .claude/hooks/gate.mjs" }] }] }\n}\n';
+  const pkg =
+    '{\n  "name": "app",\n  "scripts": { "prepare": "lefthook install" },\n  "devDependencies": { "lefthook": "^1.10.0" }\n}\n';
+  const root = project('formatted', { '.claude/settings.json': settings, 'package.json': pkg });
+
+  const { summary } = planWith(applier, 'hooks', root, '--apply');
+
+  const unchanged = summary.unchanged.map((entry) => entry.path);
+  assert.ok(unchanged.includes('.claude/settings.json'), JSON.stringify(summary.changes));
+  assert.ok(unchanged.includes('package.json'), JSON.stringify(summary.changes));
+  assert.equal(readFileSync(join(root, '.claude/settings.json'), 'utf8'), settings);
+  assert.equal(readFileSync(join(root, 'package.json'), 'utf8'), pkg);
 });
