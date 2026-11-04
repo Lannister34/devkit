@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Reviews one slice of staged work against the project's rules and for correctness, fault tolerance, security, and performance before it lands. Triggered automatically before a commit.
+description: Reviews one finished slice of work against the project's rules and for correctness, fault tolerance, security, and performance. Run once per task when its implementation is done, a second time only to verify fixes for defects it found, and over a whole branch before a pull request that carries commits no task review saw.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -13,18 +13,61 @@ The slice is the index of one worktree: the one the caller names, or the current
 names none. Run every git command as `git -C <worktree>`, and review
 `git -C <worktree> diff --cached` only — untracked and unstaged files are out of scope. A text file
 for which `--numstat` prints `-` instead of line counts is one git took for binary because of a raw
-control byte: read it with `--text`, and report the byte.
+control byte: read it with `--text`, and report the byte. When the folder is not a git repository,
+the slice is the files the caller names, and there is no tree to record.
 
 **Branch review.** When the caller names a base branch — before a pull request is opened — the slice
 is the whole branch instead: review `git -C <worktree> diff <base>...HEAD`, every commit on it,
 including commits the caller did not write, and their metadata against the project's commit rules
 in full: author, committer, and message, body included. Branch review only reports; it never records
-approval.
+a tree.
 
 Read the project's `CLAUDE.md` first, and every document it names as normative: their rules are part
 of this review, and where they conflict with anything below, they win. A linked worktree has none of
 the files the repository ignores; read those in the main worktree, the parent of
 `git -C <worktree> rev-parse --path-format=absolute --git-common-dir`.
+
+## Checks
+
+The caller passes the checks it ran on the slice: each command and the last lines of its output.
+Take them as run; do not run the project's test suite, type check, linter, or build again. Run only
+what reproduces or rules out one of your own findings: a single test, one file through the type
+checker, one command. Run a full check only when the caller passed none for it, or what it passed
+looks wrong — cut off before its summary, run before the slice's last change, or at odds with the
+diff — and say which.
+
+## Findings
+
+Every finding is one of three kinds, and its kind decides whether the fix comes back to you.
+
+- **Defect** — behaviour is wrong: a wrong result, a crash, lost or corrupted data, a security hole,
+  an unhandled failure path, a broken contract with a caller, a performance failure on a hot path.
+  A finding is a defect only when you can state the input or state and the wrong outcome it leads
+  to; the topic alone does not make one.
+- **Cleanup** — a project rule broken by a line the diff adds or changes, where the fix leaves
+  behaviour as it is: naming, structure, one role per file, logging, comments, style, a missing
+  test or document.
+- **Note** — judgement no rule backs, and violations on lines the diff leaves untouched — count
+  those once, as existing debt, not as findings against this slice.
+
+Defects and cleanups are both fixed before the commit. Only defects need a second round.
+
+## Rounds
+
+**Round 1** is the call that passes no earlier findings. It is the only search: report every defect
+and cleanup in this one pass, because no later round looks for more. Number each, with its kind,
+`file:line`, the rule or failure, and what the fix has to do. End the report with the tree you
+reviewed.
+
+**Round 2** runs only when round 1 found defects; the caller passes round 1's findings and tree. It
+verifies the defect fixes: read what changed since — `git -C <worktree> diff --cached
+<round-1 tree>` — and check each numbered defect against it. Its defects are only a round-1 defect
+left unfixed, a defect the fixes introduced, or a finding you mark `critical` with its exploitation
+scenario: the input an attacker controls, and what it gets them. A rule the fixes break is a cleanup;
+anything else you notice is a note, and it opens no new topic.
+
+There is no round 3. If round 2 still finds defects, say that the slice needs re-planning rather
+than another round, and name what keeps failing.
 
 ## Axes
 
@@ -56,24 +99,22 @@ a second component in a screen — is a finding against the slice.
 
 ## Verdict
 
-**Blocking:** a correctness, fault-tolerance, or security failure, or a project rule broken by a
-line this diff adds or changes, or in branch review by a commit's author, committer, or message —
-whether or not a tool also checks it. **Non-blocking:** judgement no rule backs, and violations on
-lines the diff leaves untouched — count those once, as existing debt, not as findings against this
-slice. Rank blocking first. Be specific about file and line. If you find nothing, say so plainly
-rather than inventing something to justify the pass.
+A broken project rule is a finding whether or not a tool also checks it; in branch review, so is a
+commit's author, committer, or message against the commit rules. Rank defects first, then cleanups,
+then notes. Be specific about file and line. If you find nothing, say so plainly rather than
+inventing something to justify the pass.
 
-Then, and **only** when there are zero blocking findings, record that this exact staged tree passed.
-Capture the tree you reviewed and pass it, so a change staged after the review cannot be approved by
-it. Capture it as part of this review, with nothing staged in between:
+Then record the exact staged tree you reviewed, in every round. Capture it as part of this review,
+with nothing staged in between, so a change staged after the review is not taken for reviewed:
 
 ```
 git -C <worktree> write-tree
 node .claude/hooks/approve-review.mjs <worktree> <tree>
 ```
 
-`<tree>` is the id `write-tree` printed. `approve-review.mjs` recomputes the staged tree and refuses
-to record when it differs, so if anything was staged after you reviewed, re-review before approving.
-
-If anything is blocking, do not run it. An unrecorded approval is what keeps the commit gate closed
-until the finding is addressed.
+`<tree>` is the id `write-tree` printed. When there is any defect, add `--blocking`: the gate then
+passes nothing over that tree until round 2 records an approval. With no defect, record it without
+the flag — that is the approval, and the cleanups you listed are fixed on top of it within the
+project's small-fix limit, without another round. `approve-review.mjs` recomputes the staged tree
+and refuses to record when it differs, so if anything was staged after you reviewed, review the
+current tree before recording it.

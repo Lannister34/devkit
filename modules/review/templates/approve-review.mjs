@@ -7,7 +7,12 @@ import { isUncOrDevice } from './path-resolver.mjs';
 
 const worktree = resolve(process.argv[2] ?? '.');
 const reviewed = process.argv[3];
+const flags = process.argv.slice(4);
 try {
+  if (flags.some((flag) => flag !== '--blocking')) {
+    throw new Error(`unknown option ${flags.find((flag) => flag !== '--blocking')}`);
+  }
+  const blocking = flags.includes('--blocking');
   if (isUncOrDevice(worktree, process.platform)) {
     throw new Error('refusing to run git against a UNC or device path');
   }
@@ -18,7 +23,13 @@ try {
     );
   }
   const repo = gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync });
-  process.stdout.write(`Approved ${repo.approve(worktree, reviewed)} for ${worktree}\n`);
+  const tree = repo.approve(worktree, reviewed, { blocking });
+  process.stdout.write(
+    blocking
+      ? `Recorded ${tree} for ${worktree} with defects: ` +
+          'nothing over it passes until a second round approves\n'
+      : `Approved ${tree} for ${worktree}\n`,
+  );
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`Approval not recorded for ${worktree}: ${message}\n`);
