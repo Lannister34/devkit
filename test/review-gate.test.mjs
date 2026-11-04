@@ -479,14 +479,15 @@ const judgeOpts = (allowed) => ({ approveScript: 'approve.mjs', scope: scopeOf(a
 
 test('judge passes an approved tree, blocks an unapproved one, and notes a git failure without blocking', () => {
   const trees = {
-    '/ok': { staged: 't1', approved: 't1' },
-    '/new': { staged: 't2', approved: 't1' },
+    '/ok': { staged: 't1', approval: { tree: 't1', files: [] } },
+    '/new': { staged: 't2', approval: { tree: 't1', files: [] } },
   };
   const repo = {
     trees: (dir) => {
       if (dir === '/broken') throw new Error('write-tree exploded');
       return trees[dir] ?? null;
     },
+    config: () => null,
   };
   const opts = judgeOpts(['/ok', '/new', '/broken']);
   assert.deepEqual(judge([{ dir: '/ok' }], repo, opts), { blocks: [], notes: [] });
@@ -499,6 +500,30 @@ test('judge passes an approved tree, blocks an unapproved one, and notes a git f
   assert.match(blocks[0], /has not been reviewed/);
   assert.match(blocks[0], /approve\.mjs/);
   assert.match(blocks[0], /t2/);
+});
+
+test('judge passes an exempt tree with a note, and refuses when the config or the diff cannot be read', () => {
+  const trees = () => ({ staged: 't2', approval: { tree: 't1', files: ['a.ts'] } });
+  const opts = judgeOpts(['/w']);
+  const configText = readFileSync(join(TEMPLATES, 'review.json'), 'utf8');
+  const fix = [{ path: 'a.ts', status: 'M', oldMode: '100644', newMode: '100644', lines: 3 }];
+
+  const exempt = judge([{ dir: '/w' }], { trees, config: () => configText, changes: () => fix }, opts);
+  assert.deepEqual(exempt.blocks, []);
+  assert.match(exempt.notes[0], /passed unreviewed as a small fix over the approved tree: 3 of \d+ lines/);
+
+  const unreadableDiff = {
+    trees,
+    config: () => configText,
+    changes: () => {
+      throw new Error('diff exploded');
+    },
+  };
+  assert.match(judge([{ dir: '/w' }], unreadableDiff, opts).blocks[0], /could not be checked: diff exploded/);
+  const brokenConfig = { trees, config: () => '{', changes: () => fix };
+  assert.match(judge([{ dir: '/w' }], brokenConfig, opts).blocks[0], /could not be checked/);
+  const noConfig = { trees, config: () => null, changes: () => fix };
+  assert.match(judge([{ dir: '/w' }], noConfig, opts).blocks[0], /no committed \.claude\/review\.json/);
 });
 
 test('judge never runs git on a directory outside the project worktrees', () => {
@@ -647,13 +672,13 @@ test('approval state lives in each worktree git dir, so one worktree never appro
   const repo = gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync });
 
   repo.approve(main);
-  assert.equal(repo.trees(main).approved, repo.trees(main).staged);
-  assert.notEqual(repo.trees(linked).approved, repo.trees(linked).staged);
+  assert.equal(repo.trees(main).approval.tree, repo.trees(main).staged);
+  assert.notEqual(repo.trees(linked).approval?.tree, repo.trees(linked).staged);
 
   repo.approve(linked);
-  assert.equal(repo.trees(linked).approved, repo.trees(linked).staged);
+  assert.equal(repo.trees(linked).approval.tree, repo.trees(linked).staged);
   stage(main, 'b.txt');
-  assert.notEqual(repo.trees(main).approved, repo.trees(main).staged);
+  assert.notEqual(repo.trees(main).approval.tree, repo.trees(main).staged);
   assert.equal(git(main, 'status', '--porcelain', '--ignored').includes('review-state'), false);
   assert.equal(git(linked, 'status', '--porcelain', '--ignored').includes('review-state'), false);
 });
@@ -773,6 +798,146 @@ test('approve-review records the reviewed tree and refuses when the staged tree 
   const ok = approveRun(dir, git(dir, 'write-tree'));
   assert.equal(ok.status, 0);
   assert.match(ok.stdout, /^Approved/);
+});
+
+function configured(name) {
+  const dir = repository(name);
+  mkdirSync(join(dir, '.claude'), { recursive: true });
+  copyFileSync(join(TEMPLATES, 'review.json'), join(dir, '.claude', 'review.json'));
+  writeFileSync(join(dir, 'app.js'), Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n') + '\n');
+  git(dir, 'add', '.');
+  git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base');
+  return dir;
+}
+
+function editLines(dir, file, count) {
+  const path = join(dir, file);
+  const lines = readFileSync(path, 'utf8').split('\n');
+  for (let i = 0; i < count; i += 1) lines[i] = `${lines[i]} changed`;
+  writeFileSync(path, lines.join('\n'));
+  git(dir, 'add', file);
+}
+
+const commitHere = (dir) => hook(bash('git commit -m x', dir), dir);
+const commitNow = (dir) => git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x');
+
+test('approval records the files of the reviewed diff beside the tree', () => {
+  const dir = configured('approval-files');
+  editLines(dir, 'app.js', 2);
+  stage(dir, 'b c.txt');
+  const repo = gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync });
+  repo.approve(dir, git(dir, 'write-tree'));
+  assert.deepEqual(repo.trees(dir).approval.files, ['app.js', 'b c.txt']);
+});
+
+test('the hook passes a small fix to approved files, and refuses a new file or a fix over the limit', () => {
+  const dir = configured('small-fix');
+  editLines(dir, 'app.js', 5);
+  assert.equal(approveRun(dir, git(dir, 'write-tree')).status, 0);
+  assert.equal(commitHere(dir).status, 0);
+  commitNow(dir);
+
+  editLines(dir, 'app.js', 10);
+  const fix = commitHere(dir);
+  assert.equal(fix.status, 0, fix.stderr);
+  commitNow(dir);
+
+  stage(dir, 'new.js');
+  const fresh = commitHere(dir);
+  assert.equal(fresh.status, 2);
+  assert.match(fresh.stderr, /new\.js was neither in the reviewed diff nor named/);
+  git(dir, 'rm', '-q', '--cached', 'new.js');
+
+  editLines(dir, 'app.js', 100);
+  const over = commitHere(dir);
+  assert.equal(over.status, 2);
+  assert.match(over.stderr, /changed lines, over the limit of \d+/);
+});
+
+test('a review that found defects lets no fix through until a second round approves it', () => {
+  const dir = configured('defects');
+  editLines(dir, 'app.js', 8);
+  const recorded = approveRun(dir, git(dir, 'write-tree'), '--blocking');
+  assert.equal(recorded.status, 0, recorded.stderr);
+  assert.match(recorded.stdout, /with defects/);
+  assert.equal(commitHere(dir).status, 2);
+  editLines(dir, 'app.js', 1);
+  const fixed = commitHere(dir);
+  assert.equal(fixed.status, 2);
+  assert.match(fixed.stderr, /a second round approves them/);
+  assert.equal(approveRun(dir, git(dir, 'write-tree')).status, 0);
+  assert.equal(commitHere(dir).status, 0);
+  const unknown = approveRun(dir, git(dir, 'write-tree'), '--force');
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /unknown option --force/);
+});
+
+test('a file the reviewer names for a cleanup may be added after the approval, and only one inside the repo', () => {
+  const dir = configured('named-file');
+  editLines(dir, 'app.js', 4);
+  const tree = git(dir, 'write-tree');
+  for (const outside of ['../escape.js', '/abs.js', 'C:/abs.js', 'a/../../b.js']) {
+    const refused = approveRun(dir, tree, '--file', outside);
+    assert.equal(refused.status, 1, outside);
+    assert.match(refused.stderr, /relative to the repository root/);
+  }
+  assert.equal(approveRun(dir, tree, '--file', 'test\\app.test.js').status, 0);
+  commitNow(dir);
+  mkdirSync(join(dir, 'test'));
+  stage(dir, 'test/app.test.js');
+  const named = commitHere(dir);
+  assert.equal(named.status, 0, named.stderr);
+  stage(dir, 'test/other.test.js');
+  assert.equal(commitHere(dir).status, 2);
+});
+
+test('a submodule bump that git is configured to hide from diffs is still seen, so it needs a review', () => {
+  const dir = configured('hidden-submodule');
+  git(dir, 'config', 'diff.ignoreSubmodules', 'all');
+  writeFileSync(join(dir, '.gitmodules'), '[submodule "sub"]\n\tpath = sub\n\turl = ./sub\n\tignore = all\n');
+  git(dir, 'update-index', '--add', '--cacheinfo', `160000,${git(dir, 'rev-parse', 'HEAD')},sub`);
+  writeFileSync(join(dir, 'README.md'), 'docs\n');
+  git(dir, 'add', 'README.md');
+  const docs = commitHere(dir);
+  assert.equal(docs.status, 2);
+  git(dir, 'rm', '-q', '--cached', 'README.md');
+  assert.equal(approveRun(dir, git(dir, 'write-tree')).status, 0);
+  assert.deepEqual(gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync }).trees(dir).approval.files, ['sub']);
+});
+
+test('an approval of a different tree lets nothing through beyond the limit, and docs-only commits need none', () => {
+  const dir = configured('other-tree');
+  writeFileSync(join(dir, 'app.js'), 'rewritten\n');
+  git(dir, 'add', 'app.js');
+  assert.equal(approveRun(dir, git(dir, 'write-tree')).status, 0);
+  git(dir, 'checkout', 'HEAD', '--', 'app.js');
+  const other = commitHere(dir);
+  assert.equal(other.status, 2);
+  assert.match(other.stderr, /over the limit/);
+  git(dir, 'reset', '-q');
+
+  writeFileSync(join(dir, 'README.md'), 'docs\n');
+  git(dir, 'add', 'README.md');
+  const docs = commitHere(dir);
+  assert.equal(docs.status, 0, docs.stderr);
+});
+
+test('a missing or unreadable approval state refuses a code change, and only the config at HEAD counts', () => {
+  const dir = configured('no-approval');
+  editLines(dir, 'app.js', 1);
+  assert.match(commitHere(dir).stderr, /no approval is recorded/);
+
+  writeFileSync(git(dir, 'rev-parse', '--path-format=absolute', '--git-path', 'devkit-review-state'), 'garbage');
+  assert.equal(commitHere(dir).status, 2);
+
+  const bare = repository('no-config');
+  writeFileSync(join(bare, 'README.md'), 'docs\n');
+  mkdirSync(join(bare, '.claude'), { recursive: true });
+  copyFileSync(join(TEMPLATES, 'review.json'), join(bare, '.claude', 'review.json'));
+  git(bare, 'add', 'README.md');
+  const unconfigured = commitHere(bare);
+  assert.equal(unconfigured.status, 2);
+  assert.match(unconfigured.stderr, /no committed \.claude\/review\.json/);
 });
 
 test('the registered hook loads from the project root with no shell, whatever directory it starts in', () => {

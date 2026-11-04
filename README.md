@@ -33,7 +33,7 @@ Modules declare a `phase`, because rules and toolchains have different prerequis
 | `core` | always | gates, comment whitelist, module-seam and surface rules, edge and failure-path rules, test rules |
 | `design` | always | design-before-code workflow, ADR scaffold and template |
 | `git` | `.git` | line-ending normalisation, conventional-commit message hook that also passes git's merge and revert subjects |
-| `review` | `.git` | code-review agent that blocks on the project's rules + a commit gate on the project's own worktrees, bound to the reviewed tree |
+| `review` | `.git` | code-review agent that blocks on the project's rules, once per task + a commit gate on the project's own worktrees, bound to the reviewed tree, that passes small fixes over it and docs-only commits |
 
 `git` and `review` are gated on the target being a repository root, so a folder that merely *contains*
 projects gets the rules without hooks that could never fire.
@@ -79,23 +79,47 @@ then re-run for the toolchain once the stack is real.
    to ignore). A shell tool starts in the `cwd` the hook is given; a terminal tab starts in the
    absolute or `~` path the call names, and otherwise somewhere the hook is not told — a new tab's
    default, or a reused tab wherever its earlier commands left it — so its commit needs a literal `-C`.
-3. No match → the commit is blocked with the command that records approval. Three shapes are blocked
+3. No match → the commit passes only under one of two exemptions, read from `.claude/review.json`
+   as committed at `HEAD`, so editing the file changes nothing until a reviewed commit lands it:
+   - **docs-only** — everything staged beyond `HEAD` is a text file with mode `100644` that matches
+     `docs.include` and none of `docs.exclude` (code directories, where a `.md` may be a prompt the
+     program reads);
+   - **small fix** — over an approval, never over a record with defects; measured against the
+     approved tree, not the last commit, so fixes add up toward the limit instead of each starting
+     afresh: only files that were in the reviewed diff or that the reviewer named with `--file`
+     for a cleanup, each modified in place or, if named, added (no deleted, retyped, re-moded, or
+     binary file), at most `smallFix.maxLines` added plus deleted lines in all; docs in the same
+     commit neither count nor need to have been reviewed.
+
+   `CLAUDE.md`, `.mcp.json`, any `.claude/` directory, and the `alwaysReview` globs (dependency
+   manifests, lockfiles, registry and publish config) never pass under either. Diffs are read with
+   `--ignore-submodules=none`, so a submodule bump that git is configured to hide still counts. A
+   missing or invalid config, or a diff git cannot produce, leaves no exemption; an unreadable
+   approval leaves no small-fix exemption. Either way the commit is refused as before.
+   Otherwise the commit is blocked with the command that records approval and the reason no
+   exemption applied. Three shapes are blocked
    outright when they target the project: a target the hook cannot read (`-C "$DIR"`, `GIT_DIR=`,
    `--git-dir`) cannot be judged; a commit that stages files itself (`-a`, `-i`, `-o`, `-p`,
    pathspecs) writes a tree nobody reviewed; a commit that skips hooks (`--no-verify`,
    `core.hooksPath`) skips the gates the approval assumes.
 4. The agent reviews that worktree's staged diff against the project's rules and its own axes, and
-   runs `.claude/hooks/approve-review.mjs` **only** when nothing is blocking, passing the tree id it
-   reviewed. A rule broken by a line the diff adds blocks; one on an untouched line is reported as
-   debt.
+   runs `.claude/hooks/approve-review.mjs` with the tree id it reviewed, adding `--blocking` when it
+   found a defect — behaviour that is wrong. A blocking record passes no code change over it until a
+   second round approves the fixes. A review with only cleanups — rule fixes that leave behaviour as it is
+   — is an approval, and those fixes land on top of it as a small fix with no second round. A rule
+   broken by a line the diff adds is a finding; one on an untouched line is reported as debt.
 
 Approval is bound to the exact tree the reviewer read: it passes that tree id to
 `approve-review.mjs`, which recomputes `git write-tree` and refuses to record when it differs, so a
 fix staged while a background review runs cannot be approved unreviewed, and reviewing one worktree
-does not approve its sibling. The hook is split into one-role files under `.claude/hooks/` — a
-shell lexer, a path resolver, a commit reader, a hook-payload decoder, a worktree-scope resolver, a
-git-state adapter, and the gate that judges — loaded by `require-review.mjs`; `approve-review.mjs`
-records approval. It is
+does not approve its sibling. The record also lists the files of the reviewed diff, which bound the
+small-fix exemption; a bare tree id from an earlier release still reads, as an approval of no
+files. The hook is split into one-role files under `.claude/hooks/` — a shell lexer, a path
+resolver, a commit reader, a hook-payload decoder, a worktree-scope resolver, a path-glob matcher, a
+diff decoder, an approval-record codec, a review-config decoder, the exemption rules, a git-state
+adapter, and the gate that judges — loaded by `require-review.mjs`; `approve-review.mjs` records the
+reviewed tree. The reasons for this shape are in
+[ADR-0001](docs/adr/0001-review-once-per-task.md). It is
 registered in exec form — `node` with `${CLAUDE_PROJECT_DIR}/.claude/hooks/require-review.mjs` as its
 argument — so Claude Code fills in the project root itself and starts node with no shell: the hook
 loads from the project whatever directory the command runs in, on Windows with or without Git Bash.
@@ -237,7 +261,10 @@ and device paths, that it treats a nested repository under the project — a `.g
 `.git` file, and a symlinked path component — as foreign with filesystem checks alone, that every
 git call disables fsmonitor and hooks, and that it writes a reason to stderr when it fails open; its
 git adapter against a real repository with a linked worktree; approval bound to the reviewed tree and
-refused when that tree has since changed; and its entrypoints against a real
+refused when that tree has since changed; every exemption decision — docs-only, the small-fix limit
+at its edge, a new, deleted, re-moded, binary, or unreviewed file, a dependency file, a nested
+`.claude/`, a file the reviewer named, a submodule bump git hides, a record with defects, an approval of another tree, a missing or broken approval or config — as a pure rule and
+through the hook against a real repository; and its entrypoints against a real
 repository — the registered command included, started with no shell from outside the project; the
 commit-message patterns; the comment gate and its baseline, end to end; the `ignored-targets`
 decision; and the upgrade of devkit-owned hook entries. It needs Node, git, and the `typescript`

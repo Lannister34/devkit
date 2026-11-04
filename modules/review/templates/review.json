@@ -1,0 +1,61 @@
+{
+  "smallFix": {
+    "maxLines": 150
+  },
+  "docs": {
+    "include": [
+      "*.md",
+      "*.txt",
+      "*.rst",
+      "*.adoc",
+      ".gitignore",
+      ".prettierignore",
+      ".eslintignore"
+    ],
+    "exclude": ["src/**", "**/src/**"]
+  },
+  "alwaysReview": [
+    "package.json",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    ".npmrc",
+    "yarn.lock",
+    ".yarnrc.yml",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "bun.lock",
+    "bun.lockb",
+    "pyproject.toml",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile",
+    "Pipfile.lock",
+    "*requirements*.txt",
+    "**/requirements/**",
+    "*constraints*.txt",
+    "setup.py",
+    "setup.cfg",
+    "Cargo.toml",
+    "Cargo.lock",
+    "go.mod",
+    "go.sum",
+    "Gemfile",
+    "Gemfile.lock",
+    "composer.json",
+    "composer.lock",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "gradle.lockfile",
+    "*.csproj",
+    "Directory.Packages.props",
+    "packages.lock.json",
+    "Podfile",
+    "Podfile.lock",
+    "Package.swift",
+    "Package.resolved",
+    "CMakeLists.txt",
+    ".npmignore",
+    ".dockerignore"
+  ]
+}
