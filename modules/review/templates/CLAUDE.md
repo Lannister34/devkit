@@ -16,10 +16,11 @@ review is covered by the checks, not by another run.
 The commit gate is the backstop for a skipped review, and reaching it means the loop was skipped. The
 reviewer records the tree it read: approved when it found no defect, marked blocking otherwise. The
 gate passes an approved tree; a change on top of an approved tree, within `smallFix.maxLines` in
-`.claude/review.json`, to the files that review covered — its cleanups, or a later tweak; and a
-commit that touches only the docs that file lists. A tree marked blocking passes nothing until a
-second run approves its fixes. Dependency manifests and lockfiles, `CLAUDE.md`, and `.claude/`
-always need a review, however small the change.
+`.claude/review.json`, to the files that review covered or named for its cleanups — its cleanups,
+or a later tweak; and a commit that touches only the docs that file lists. Over a tree marked
+blocking, no code change passes until a second run approves its fixes. Dependency manifests and
+lockfiles, `CLAUDE.md`, `.mcp.json`, and any `.claude/` directory always need a review, however small
+the change.
 
 A pull request hands over every commit on the branch. Commits written by another tool or agent, by
 someone else, or before these rules never passed a task review: before opening a pull request on a

@@ -121,7 +121,14 @@ test('a docs commit stops being docs-only on a code file, a code directory, the 
     modified('packages/x/CLAUDE.md', 1),
     modified('.claude/agents/code-review.md', 1),
     modified('.claude/skills/x/SKILL.md', 1),
+    modified('packages/api/.claude/agents/code-review.md', 1),
+    modified('.mcp.json', 1),
     modified('requirements.txt', 1),
+    modified('dev-requirements.txt', 1),
+    modified('services/api/requirements/prod.txt', 1),
+    modified('CMakeLists.txt', 1),
+    modified('app/blog/post.mdx', 1),
+    modified('.npmignore', 1),
   ]) {
     assert.equal(docsCommit(modified('README.md', 1), entry).exempt, false, entry.path);
   }
@@ -132,6 +139,18 @@ test('a doc that becomes a symlink or a submodule is not a doc change', () => {
   const submodule = { path: 'notes.md', status: 'A', oldMode: '000000', newMode: '160000', lines: null };
   assert.equal(docsCommit(symlink).exempt, false);
   assert.equal(docsCommit(submodule).exempt, false);
+});
+
+test('a doc git takes for binary, or one marked executable, is not a doc change', () => {
+  assert.equal(docsCommit(modified('README.md', null)).exempt, false);
+  const executable = { path: 'run.txt', status: 'A', oldMode: '000000', newMode: '100755', lines: 1 };
+  assert.equal(docsCommit(executable).exempt, false);
+});
+
+test('a file the reviewer named for a cleanup may be added on top of the approval', () => {
+  const approval = approvalOf('src/app.ts', 'test/app.test.ts');
+  assert.equal(afterApproval([modified('src/app.ts', 2), added('test/app.test.ts', 30)], approval).exempt, true);
+  assert.equal(afterApproval([added('test/other.test.ts', 30)], approval).exempt, false);
 });
 
 test('a commit with nothing staged beyond HEAD is not docs-only', () => {
@@ -153,11 +172,12 @@ test('docs changed beside a small fix neither count toward the limit nor need to
 
 test('a small fix may not add, delete, retype or re-mode a file, touch one it was not approved for, or change a binary', () => {
   const cases = [
-    [added('src/new.ts'), /added, deleted, or changed in type/],
-    [deleted('src/app.ts'), /added, deleted, or changed in type/],
+    [added('src/new.ts'), /neither in the reviewed diff nor named by the reviewer/],
+    [deleted('src/app.ts'), /is deleted or changed in type/],
     [{ path: 'src/app.ts', status: 'T', oldMode: '100644', newMode: '120000', lines: 1 }, /changed in type/],
     [{ path: 'src/app.ts', status: 'M', oldMode: '100644', newMode: '100755', lines: 0 }, /file mode/],
-    [modified('src/other.ts', 1), /was not in the reviewed diff/],
+    [{ path: 'src/app.ts', status: 'A', oldMode: '000000', newMode: '120000', lines: 1 }, /not added as a regular file/],
+    [modified('src/other.ts', 1), /was neither in the reviewed diff nor named by the reviewer/],
     [modified('src/app.ts', null), /is binary/],
   ];
   for (const [entry, reason] of cases) {
@@ -178,7 +198,7 @@ test('a dependency file, the rules or the gate need a review however small the c
 test('an approval from an older release names no files, so nothing passes as a small fix over it', () => {
   const verdict = afterApproval([modified('src/app.ts', 1)], approvalOf());
   assert.equal(verdict.exempt, false);
-  assert.match(verdict.reason, /was not in the reviewed diff/);
+  assert.match(verdict.reason, /was neither in the reviewed diff nor named by the reviewer/);
 });
 
 test('with no approval recorded, only a docs-only commit passes', () => {

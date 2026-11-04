@@ -845,7 +845,7 @@ test('the hook passes a small fix to approved files, and refuses a new file or a
   stage(dir, 'new.js');
   const fresh = commitHere(dir);
   assert.equal(fresh.status, 2);
-  assert.match(fresh.stderr, /new\.js is added/);
+  assert.match(fresh.stderr, /new\.js was neither in the reviewed diff nor named/);
   git(dir, 'rm', '-q', '--cached', 'new.js');
 
   editLines(dir, 'app.js', 100);
@@ -870,6 +870,39 @@ test('a review that found defects lets no fix through until a second round appro
   const unknown = approveRun(dir, git(dir, 'write-tree'), '--force');
   assert.equal(unknown.status, 1);
   assert.match(unknown.stderr, /unknown option --force/);
+});
+
+test('a file the reviewer names for a cleanup may be added after the approval, and only one inside the repo', () => {
+  const dir = configured('named-file');
+  editLines(dir, 'app.js', 4);
+  const tree = git(dir, 'write-tree');
+  for (const outside of ['../escape.js', '/abs.js', 'C:/abs.js', 'a/../../b.js']) {
+    const refused = approveRun(dir, tree, '--file', outside);
+    assert.equal(refused.status, 1, outside);
+    assert.match(refused.stderr, /relative to the repository root/);
+  }
+  assert.equal(approveRun(dir, tree, '--file', 'test\\app.test.js').status, 0);
+  commitNow(dir);
+  mkdirSync(join(dir, 'test'));
+  stage(dir, 'test/app.test.js');
+  const named = commitHere(dir);
+  assert.equal(named.status, 0, named.stderr);
+  stage(dir, 'test/other.test.js');
+  assert.equal(commitHere(dir).status, 2);
+});
+
+test('a submodule bump that git is configured to hide from diffs is still seen, so it needs a review', () => {
+  const dir = configured('hidden-submodule');
+  git(dir, 'config', 'diff.ignoreSubmodules', 'all');
+  writeFileSync(join(dir, '.gitmodules'), '[submodule "sub"]\n\tpath = sub\n\turl = ./sub\n\tignore = all\n');
+  git(dir, 'update-index', '--add', '--cacheinfo', `160000,${git(dir, 'rev-parse', 'HEAD')},sub`);
+  writeFileSync(join(dir, 'README.md'), 'docs\n');
+  git(dir, 'add', 'README.md');
+  const docs = commitHere(dir);
+  assert.equal(docs.status, 2);
+  git(dir, 'rm', '-q', '--cached', 'README.md');
+  assert.equal(approveRun(dir, git(dir, 'write-tree')).status, 0);
+  assert.deepEqual(gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync }).trees(dir).approval.files, ['sub']);
 });
 
 test('an approval of a different tree lets nothing through beyond the limit, and docs-only commits need none', () => {

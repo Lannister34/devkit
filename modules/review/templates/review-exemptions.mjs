@@ -1,7 +1,8 @@
 import { globMatcher } from './path-glob.mjs';
 
-const GATE_FILES = globMatcher(['.claude/**', 'CLAUDE.md']);
+const GATE_FILES = globMatcher(['**/.claude/**', 'CLAUDE.md', '.mcp.json']);
 const REGULAR_FILE = new Set(['100644', '100755']);
+const NO_FILE = '000000';
 
 const pass = (reason) => ({ exempt: true, reason });
 const refuse = (reason) => ({ exempt: false, reason });
@@ -12,19 +13,34 @@ function docOnly(entry, config) {
     config.isDoc(entry.path) &&
     !GATE_FILES(entry.path) &&
     !config.alwaysReview(entry.path) &&
-    REGULAR_FILE.has(mode)
+    mode === '100644' &&
+    entry.lines !== null
   );
+}
+
+function modeBlocker(entry) {
+  if (entry.status === 'A') {
+    return entry.oldMode === NO_FILE && REGULAR_FILE.has(entry.newMode)
+      ? null
+      : `${entry.path} is not added as a regular file`;
+  }
+  return entry.oldMode === entry.newMode && REGULAR_FILE.has(entry.newMode)
+    ? null
+    : `${entry.path} changes its file mode`;
 }
 
 function smallFixBlocker(entry, config, reviewed) {
   if (GATE_FILES(entry.path) || config.alwaysReview(entry.path)) {
     return `${entry.path} always needs a review`;
   }
-  if (entry.status !== 'M') return `${entry.path} is added, deleted, or changed in type`;
-  if (entry.oldMode !== entry.newMode || !REGULAR_FILE.has(entry.newMode)) {
-    return `${entry.path} changes its file mode`;
+  if (entry.status !== 'M' && entry.status !== 'A') {
+    return `${entry.path} is deleted or changed in type`;
   }
-  if (!reviewed.has(entry.path)) return `${entry.path} was not in the reviewed diff`;
+  const mode = modeBlocker(entry);
+  if (mode) return mode;
+  if (!reviewed.has(entry.path)) {
+    return `${entry.path} was neither in the reviewed diff nor named by the reviewer`;
+  }
   if (entry.lines === null) return `${entry.path} is binary`;
   return null;
 }

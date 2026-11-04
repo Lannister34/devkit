@@ -113,8 +113,11 @@ node .claude/hooks/approve-review.mjs <worktree> <tree>
 ```
 
 `<tree>` is the id `write-tree` printed. When there is any defect, add `--blocking`: the gate then
-passes nothing over that tree until round 2 records an approval. With no defect, record it without
-the flag — that is the approval, and the cleanups you listed are fixed on top of it within the
-project's small-fix limit, without another round. `approve-review.mjs` recomputes the staged tree
+passes no code change over that tree until round 2 records an approval. With no defect, record it
+without the flag — that is the approval, and the cleanups you listed are fixed on top of it within
+the project's small-fix limit, without another round. The gate lets those fixes touch only the files
+of the diff you reviewed, so when a cleanup needs another file — a new test, the second half of a
+split — name it in the finding and add `--file <path>` for it, the path relative to the repository
+root; repeat the option per file. `approve-review.mjs` recomputes the staged tree
 and refuses to record when it differs, so if anything was staged after you reviewed, review the
 current tree before recording it.

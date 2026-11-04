@@ -7,12 +7,28 @@ import { isUncOrDevice } from './path-resolver.mjs';
 
 const worktree = resolve(process.argv[2] ?? '.');
 const reviewed = process.argv[3];
-const flags = process.argv.slice(4);
-try {
-  if (flags.some((flag) => flag !== '--blocking')) {
-    throw new Error(`unknown option ${flags.find((flag) => flag !== '--blocking')}`);
+const REPO_PATH = /^(?![/\\]|[A-Za-z]:)(?!.*(?:^|[/\\])\.\.(?:[/\\]|$)).+$/;
+
+function options(args) {
+  const named = [];
+  let blocking = false;
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--blocking') {
+      blocking = true;
+    } else if (args[i] === '--file' && REPO_PATH.test(args[i + 1] ?? '')) {
+      named.push(args[i + 1].replaceAll('\\', '/'));
+      i += 1;
+    } else if (args[i] === '--file') {
+      throw new Error('--file takes a path relative to the repository root, inside it');
+    } else {
+      throw new Error(`unknown option ${args[i]}`);
+    }
   }
-  const blocking = flags.includes('--blocking');
+  return { blocking, named };
+}
+
+try {
+  const { blocking, named } = options(process.argv.slice(4));
   if (isUncOrDevice(worktree, process.platform)) {
     throw new Error('refusing to run git against a UNC or device path');
   }
@@ -23,11 +39,11 @@ try {
     );
   }
   const repo = gitRepo({ exec: execFileSync, read: readFileSync, write: writeFileSync });
-  const tree = repo.approve(worktree, reviewed, { blocking });
+  const tree = repo.approve(worktree, reviewed, { blocking, named });
   process.stdout.write(
     blocking
       ? `Recorded ${tree} for ${worktree} with defects: ` +
-          'nothing over it passes until a second round approves\n'
+          'no code change over it passes until a second round approves\n'
       : `Approved ${tree} for ${worktree}\n`,
   );
 } catch (error) {

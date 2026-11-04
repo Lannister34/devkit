@@ -5,13 +5,10 @@
   "docs": {
     "include": [
       "*.md",
-      "*.mdx",
       "*.txt",
       "*.rst",
       "*.adoc",
       ".gitignore",
-      ".dockerignore",
-      ".npmignore",
       ".prettierignore",
       ".eslintignore"
     ],
@@ -33,9 +30,9 @@
     "uv.lock",
     "Pipfile",
     "Pipfile.lock",
-    "requirements*.txt",
-    "requirements/**",
-    "constraints*.txt",
+    "*requirements*.txt",
+    "**/requirements/**",
+    "*constraints*.txt",
     "setup.py",
     "setup.cfg",
     "Cargo.toml",
@@ -56,6 +53,9 @@
     "Podfile",
     "Podfile.lock",
     "Package.swift",
-    "Package.resolved"
+    "Package.resolved",
+    "CMakeLists.txt",
+    ".npmignore",
+    ".dockerignore"
   ]
 }

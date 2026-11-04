@@ -28,7 +28,7 @@ export function gitRepo({ exec, read, write }) {
     }
   };
   const stagedFiles = (dir) =>
-    run(dir, ['diff', '--cached', '--name-only', '-z', '--no-renames'])
+    run(dir, ['diff', '--cached', '--name-only', '-z', '--no-renames', '--ignore-submodules=none'])
       .split('\0')
       .filter((path) => path !== '');
   return {
@@ -45,7 +45,16 @@ export function gitRepo({ exec, read, write }) {
     changes(dir, base) {
       const against = base === undefined ? [] : [base];
       return diffEntries(
-        run(dir, ['diff', '--cached', '--raw', '--numstat', '-z', '--no-renames', ...against]),
+        run(dir, [
+          'diff',
+          '--cached',
+          '--raw',
+          '--numstat',
+          '-z',
+          '--no-renames',
+          '--ignore-submodules=none',
+          ...against,
+        ]),
       );
     },
     config(dir) {
@@ -55,7 +64,7 @@ export function gitRepo({ exec, read, write }) {
         return null;
       }
     },
-    approve(dir, reviewed, { blocking = false } = {}) {
+    approve(dir, reviewed, { blocking = false, named = [] } = {}) {
       const staged = git(dir, ['write-tree']);
       if (reviewed !== undefined && staged !== reviewed) {
         throw new Error(
@@ -63,7 +72,7 @@ export function gitRepo({ exec, read, write }) {
             'review the current tree before recording approval.',
         );
       }
-      write(statePath(dir), encodeApproval(staged, stagedFiles(dir), blocking), 'utf8');
+      write(statePath(dir), encodeApproval(staged, [...new Set([...stagedFiles(dir), ...named])], blocking), 'utf8');
       return staged;
     },
   };

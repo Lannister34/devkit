@@ -58,17 +58,20 @@ The gate is a Claude Code `PreToolUse` hook that reads the agent's shell command
    wrong.
 4. The gate stays per commit, and passes, besides the exact approved tree:
    - a **small fix** over an approval: a diff against the approved tree that modifies in place only
-     files of the reviewed diff, within `smallFix.maxLines` (150 by default) in
-     `.claude/review.json`. That is how a review's cleanups, and later tweaks, land without another
-     run. The reviewer records its tree in every round, marked `blocking` when it found a defect, and
-     a blocking record passes no fix until the second round approves;
-   - a **docs-only** commit, by `docs.include` and `docs.exclude` in the same file.
+     files of the reviewed diff, or adds or modifies a file the reviewer named with `--file` for a
+     cleanup (a new test, the second half of a split), within `smallFix.maxLines` (150 by default)
+     in `.claude/review.json`. That is how a review's cleanups, and later tweaks, land without
+     another run. The reviewer records its tree in every round, marked `blocking` when it found a
+     defect, and a blocking record passes no code change until the second round approves;
+   - a **docs-only** commit: text files with mode `100644`, by `docs.include` and `docs.exclude` in
+     the same file.
 
-   Dependency manifests, lockfiles and registry config (`alwaysReview`), `CLAUDE.md`, and `.claude/`
-   pass under neither, whatever the size.
-5. The gate fails closed on everything new: a missing or invalid config, an unreadable approval, or
-   a diff git cannot produce leaves no exemption. The config is read from `HEAD`, so loosening it
-   needs a reviewed commit.
+   Dependency manifests, lockfiles, registry and publish config (`alwaysReview`), `CLAUDE.md`,
+   `.mcp.json`, and any `.claude/` directory pass under neither, whatever the size.
+5. The gate fails closed on everything new: a missing or invalid config, or a diff git cannot
+   produce, leaves no exemption, and an unreadable approval leaves no small-fix exemption. Diffs are
+   read with `--ignore-submodules=none`, so a submodule bump that git is configured to hide still
+   counts. The config is read from `HEAD`, so loosening it needs a reviewed commit.
 
 ## Consequences
 
@@ -83,7 +86,10 @@ The gate is a Claude Code `PreToolUse` hook that reads the agent's shell command
   it per review, not per commit, because the diff is measured against the approved tree.
 - Nothing proves that the cleanups listed were fixed, or that a fix sold as a cleanup leaves
   behaviour unchanged. The gate catches a forgotten review, not a careless fix.
-- A cleanup that splits a file adds one, which the gate refuses as a small fix; it needs a review.
+- A cleanup that needs a file outside the reviewed diff passes only when the reviewer named it; one
+  it did not foresee needs a review.
+- A slice recorded with defects can still commit its docs, since docs-only commits are not gated at
+  all; a defect in a prompt that lives outside the configured code directories is not held back.
 - The reviewer might file everything as a defect, which brings the extra rounds back. The prompt
   asks for the input and the wrong outcome before a finding counts as one.
 - A second round may let a real but non-critical defect that the first round missed through as a
